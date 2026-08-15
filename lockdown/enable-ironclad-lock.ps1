@@ -38,7 +38,7 @@ foreach ($path in $zenPaths) {
     "BlockAboutDebugging": true,
     "BlockAboutProfiles": true,
     "ExtensionSettings": {
-      "focusme-anti@zen.extension": {
+      "focusme-discipline@k0rnhulio.com": {
         "private_browsing": true
       }
     }
