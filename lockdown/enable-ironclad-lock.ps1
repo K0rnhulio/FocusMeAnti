@@ -22,6 +22,8 @@ $zenPaths = @(
     "$env:LOCALAPPDATA\Programs\zen"
 )
 
+$policyJsonText = '{"policies":{"BlockAboutAddons":true,"BlockAboutDebugging":true,"BlockAboutProfiles":true,"ExtensionSettings":{"focusme-discipline@k0rnhulio.com":{"private_browsing":true}}}}'
+
 $zenFound = $false
 foreach ($path in $zenPaths) {
     if (Test-Path $path) {
@@ -31,21 +33,7 @@ foreach ($path in $zenPaths) {
         }
         
         $policyJsonPath = Join-Path $distDir "policies.json"
-        $policyContent = @'
-{
-  "policies": {
-    "BlockAboutAddons": true,
-    "BlockAboutDebugging": true,
-    "BlockAboutProfiles": true,
-    "ExtensionSettings": {
-      "focusme-discipline@k0rnhulio.com": {
-        "private_browsing": true
-      }
-    }
-  }
-}
-'@
-        Set-Content -Path $policyJsonPath -Value $policyContent -Force
+        [System.IO.File]::WriteAllText($policyJsonPath, $policyJsonText)
         Write-Host "[✓] Zen Browser locked: $policyJsonPath" -ForegroundColor Green
         $zenFound = $true
     }
@@ -73,9 +61,8 @@ Write-Host "[✓] Google Chrome locked: chrome://extensions blocked via Registry
 Write-Host ""
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "  LOCKDOWN ACTIVE!" -ForegroundColor Green
-Write-Host "  • Zen Browser: about:addons & about:debugging BLOCKED" -ForegroundColor White
-Write-Host "  • Google Chrome: chrome://extensions BLOCKED" -ForegroundColor White
+Write-Host "  * Zen Browser: about:addons and about:debugging BLOCKED" -ForegroundColor White
+Write-Host "  * Google Chrome: chrome://extensions BLOCKED" -ForegroundColor White
 Write-Host "  Please completely restart Chrome and Zen Browser." -ForegroundColor Yellow
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
-Read-Host "Press Enter to exit"
