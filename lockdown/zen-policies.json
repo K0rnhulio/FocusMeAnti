@@ -1,0 +1,12 @@
+{
+  "policies": {
+    "BlockAboutAddons": true,
+    "BlockAboutDebugging": true,
+    "BlockAboutProfiles": true,
+    "ExtensionSettings": {
+      "focusme-anti@zen.extension": {
+        "private_browsing": true
+      }
+    }
+  }
+}
