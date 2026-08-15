@@ -2,8 +2,8 @@
 
 > **Project Name:** FocusMe Discipline & Morning Unblocker  
 > **Target Platform:** Android 8.0+ (API Level 26+)  
-> **Language & Framework:** Kotlin, Jetpack Compose, CameraX, Google ML Kit, Android Accessibility Service  
-> **Version:** 1.0.0 (Concept & Architecture Specification)
+> **Language & Framework:** Kotlin, Jetpack Compose, CameraX, Google ML Kit, Android Accessibility Service, NotificationListenerService  
+> **Version:** 1.1.0 (Reactive-Only Messaging & Nighttime Gate Specification)
 
 ---
 
@@ -11,10 +11,10 @@
 
 Smartphones are engineered around frictionless dopamine loops. Typical app blockers fail because unlocking an app only requires typing a password or waiting out a trivial timer—actions that require zero physical or cognitive exertion.
 
-**FocusMe for Android** inverts this dynamic by introducing **Physical Friction & Cognitive Effort Gates**:
+**FocusMe for Android** inverts this dynamic by introducing **Physical Friction, Cognitive Effort Gates, and Reactive-Only Communication**:
 1. **The Morning Wake-up Protocol:** Forces physical bed-exit and neurological activation (Steps, G-Sensor Shakes, or Gyroscope Tilt Maze) before the phone unblocks in the morning.
-2. **The Hourly Dopamine Toll Gate:** Enforces a strict **5 minutes per clock hour combined limit** (1:00 PM – 9:00 PM) on Twitter/X, Reddit, Facebook, Instagram, and TikTok.
-3. **Earn Your Screen Time:** To unlock the 5-minute leisure session, the user must answer a **30-minute productivity reflection** AND complete physical push-ups or a mental challenge.
+2. **The Hourly Dopamine Toll Gate:** Enforces a strict **5 minutes per clock hour combined limit** (1:00 PM – 9:00 PM) on Twitter/X, Reddit, Facebook, Instagram, and TikTok with a mandatory 30-min productivity check-in.
+3. **🌙 Reactive-Only Nighttime Messaging Gate (WhatsApp & Zalo):** After 9:00 PM, the phone is locked against proactive scrolling. You can only open WhatsApp or Zalo when a legitimate incoming message has arrived, granting a 2–3 minute focused reply window.
 
 ---
 
@@ -44,10 +44,11 @@ Smartphones are engineered around frictionless dopamine loops. Typical app block
 │                          DISCIPLINE CONTROLLER SERVICE                      │
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │ AccessibilityService + UsageStatsManager                              │  │
+│  │ AccessibilityService + UsageStatsManager + NotificationListener       │  │
 │  │ • Monitors foreground app package names (Twitter, Reddit, FB, IG...)  │  │
 │  │ • Tracks cumulative hourly usage bucket [YYYY-MM-DD-HH]               │  │
 │  │ • Evaluates 1:00 PM – 9:00 PM schedule window                         │  │
+│  │ • NotificationListener grants 3-min Reactive Pass for WhatsApp/Zalo   │  │
 │  │ • Enforces 30-min reflection & physical toll completion               │  │
 │  └───────────────────────────────────┬───────────────────────────────────┘  │
 └──────────────────────────────────────┼──────────────────────────────────────┘
@@ -61,6 +62,7 @@ Smartphones are engineered around frictionless dopamine loops. Typical app block
 │  └────────────────────────┘ └────────────────────────┘ └─────────────────┘  │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │ 🔒 5-Minute Floating Timer Pill + Locked Countdown Screen             │  │
+│  │ 💬 Reactive Messaging Grace Period Banner (e.g., "2:45 to reply")     │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -108,10 +110,31 @@ When opening Twitter/X, Reddit, Facebook, Instagram, or TikTok during 1PM–9PM:
 
 ---
 
+### 3.4. 💬 Reactive-Only Nighttime Messaging Gate (WhatsApp & Zalo)
+
+#### The Problem:
+After 9:00 PM, you want the phone locked to protect your sleep, but you still need to be reachable for important messages from family, friends, or clients. If messaging apps are permanently open, it leads to late-night status browsing and channel scrolling.
+
+#### The Solution (Reactive Messaging):
+- **Proactive Opening Blocked:** After 9:00 PM, tapping WhatsApp (`com.whatsapp`) or Zalo (`com.zing.zalo`) out of boredom displays:  
+  > 🔒 *"Night Lock Active — Messaging is in Reactive Mode. You can reply when a message arrives."*
+- **Notification-Triggered Reply Pass (`NotificationListenerService`):**
+  1. When an incoming message notification arrives from **WhatsApp** or **Zalo**:
+     - The notification is posted to the lock screen with standard Android inline quick-reply.
+     - A **3-Minute Reactive Reply Window** is automatically activated for that specific app.
+  2. When the user taps the notification, WhatsApp or Zalo opens without being blocked.
+  3. A subtle floating pill displays: `Reply Window: 2m 45s left`.
+  4. Once the 3 minutes expire, the app smoothly re-locks to prevent lingering and status doomscrolling.
+- **Emergency & Incoming Phone Calls:**
+  - Phone calls (Cellular, WhatsApp Audio/Video Calls, Zalo Calls) are **100% unrestricted at all times**.
+
+---
+
 ## 4. Android System APIs & Required Permissions
 
 | Permission | Purpose |
 |---|---|
+| `android.permission.BIND_NOTIFICATION_LISTENER_SERVICE` | Detects incoming WhatsApp & Zalo messages to activate the 3-minute reactive reply window after 9 PM. |
 | `android.permission.BIND_ACCESSIBILITY_SERVICE` | Real-time foreground app detection, Facebook Reels stripping, and URL interception in browsers. |
 | `android.permission.SYSTEM_ALERT_WINDOW` | Drawing the full-screen reflection barrier, maze game, and floating countdown pill over other apps. |
 | `android.permission.PACKAGE_USAGE_STATS` | Backing up hourly usage calculations and tracking app activity. |
@@ -128,6 +151,7 @@ When opening Twitter/X, Reddit, Facebook, Instagram, or TikTok during 1PM–9PM:
 - **UI Framework:** Jetpack Compose (Material Design 3 with custom obsidian glassmorphism)
 - **Computer Vision:** Google ML Kit Pose Detection (`com.google.mlkit:pose-detection:18.0.0-beta3`)
 - **Camera Pipeline:** AndroidX CameraX (`androidx.camera:camera-camera2:1.3.1`)
+- **Notification Pipeline:** `NotificationListenerService` with package filters for WhatsApp & Zalo
 - **Sensor Management:** Android SensorManager (Accelerometer, Gyroscope, Step Detector)
 - **Local Persistence:** Room Database + Jetpack DataStore Preferences
 - **Dependency Injection:** Hilt / Kotlin Coroutines & Flow
