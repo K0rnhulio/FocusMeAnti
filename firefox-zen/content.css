@@ -1,163 +1,169 @@
 /**
- * FocusMe - In-Page Live Time Pill Styling & Facebook Reels Blocker
+ * FocusMe - Floating Pill & Content Hider Styling
+ * Blocks Facebook Reels, YouTube Shorts hints, and WhatsApp Web Status/Stories
  */
 
-#focusme-floating-pill {
+/* =========================================================================
+   1. Facebook Reels Suppression
+   ========================================================================= */
+a[href*="/reel/"],
+a[href*="/reels/"],
+a[aria-label="Reels"],
+div[aria-label="Reels"],
+div[data-pagelet*="Reel"],
+div[data-pagelet*="reel"],
+div[aria-label*="Reels and short videos" i],
+div:has(> a[href*="/reel/"]),
+div:has(> a[href*="/reels/"]),
+div:has(> div[data-pagelet*="Reel"]) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* =========================================================================
+   2. WhatsApp Web Status / Stories Doomscroll Suppression
+   ========================================================================= */
+button[aria-label="Status"],
+button[aria-label="Updates"],
+button[aria-label*="Status" i],
+button[aria-label*="Updates" i],
+span[data-icon="status-outline"],
+span[data-icon="status-refreshed"],
+span[data-icon="status-v3-unread"],
+span[data-icon="newsletter-outline"],
+div[data-tab="3"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* =========================================================================
+   3. FocusMe In-Page Floating Countdown Pill
+   ========================================================================= */
+.focusme-pill-container {
   position: fixed !important;
   bottom: 24px !important;
   right: 24px !important;
   z-index: 2147483647 !important;
-  display: flex !important;
-  align-items: center !important;
-  box-sizing: border-box !important;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
   font-size: 13px !important;
-  line-height: 1.4 !important;
   color: #f8fafc !important;
+  line-height: 1 !important;
   user-select: none !important;
+  pointer-events: auto !important;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-#focusme-floating-pill .focusme-pill-content {
+.focusme-pill-content {
+  background: rgba(15, 23, 42, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 9999px !important;
+  padding: 8px 14px 8px 10px !important;
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
-  padding: 8px 14px !important;
-  background: rgba(15, 23, 42, 0.88) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.14) !important;
-  border-radius: 9999px !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
-  cursor: default !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
 }
 
-#focusme-floating-pill .focusme-pill-icon {
+.focusme-pill-icon {
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: 50% !important;
+  background: rgba(56, 189, 248, 0.15) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   color: #38bdf8 !important;
 }
 
-#focusme-floating-pill .focusme-pill-body {
+.focusme-pill-body {
   display: flex !important;
-  align-items: baseline !important;
-  gap: 6px !important;
+  flex-direction: column !important;
+  gap: 2px !important;
 }
 
-#focusme-floating-pill .focusme-pill-time {
-  font-weight: 700 !important;
-  font-size: 14px !important;
-  letter-spacing: 0.5px !important;
+.focusme-pill-time {
+  font-size: 15px !important;
+  font-weight: 800 !important;
   font-variant-numeric: tabular-nums !important;
-  color: #ffffff !important;
+  color: #f8fafc !important;
+  letter-spacing: 0.3px !important;
 }
 
-#focusme-floating-pill .focusme-pill-label {
-  font-size: 11px !important;
-  font-weight: 500 !important;
+.focusme-pill-label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
   color: #94a3b8 !important;
-  text-transform: lowercase !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.4px !important;
 }
 
-#focusme-floating-pill .focusme-pill-toggle {
+.focusme-pill-toggle {
+  background: transparent !important;
+  border: none !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  padding: 2px !important;
+  margin-left: 2px !important;
+  border-radius: 4px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: transparent !important;
-  border: none !important;
-  padding: 2px !important;
-  margin-left: 2px !important;
-  cursor: pointer !important;
-  color: #64748b !important;
-  border-radius: 50% !important;
   transition: color 0.15s ease !important;
 }
 
-#focusme-floating-pill .focusme-pill-toggle:hover {
-  color: #f1f5f9 !important;
+.focusme-pill-toggle:hover {
+  color: #f8fafc !important;
 }
 
-/* Warning State (< 60s) */
-#focusme-floating-pill.focusme-warn .focusme-pill-content {
-  border-color: rgba(245, 158, 11, 0.5) !important;
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3) !important;
+/* Warnings */
+.focusme-pill-container.focusme-warn .focusme-pill-content {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  background: rgba(30, 27, 20, 0.95) !important;
 }
 
-#focusme-floating-pill.focusme-warn .focusme-pill-icon {
+.focusme-pill-container.focusme-warn .focusme-pill-icon {
+  background: rgba(245, 158, 11, 0.2) !important;
   color: #f59e0b !important;
 }
 
-#focusme-floating-pill.focusme-warn .focusme-pill-time {
-  color: #fef08a !important;
+.focusme-pill-container.focusme-warn .focusme-pill-time {
+  color: #fbbf24 !important;
 }
 
-#focusme-floating-pill.focusme-warn .focusme-pill-label {
-  color: #fcd34d !important;
+.focusme-pill-container.focusme-critical .focusme-pill-content {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background: rgba(40, 15, 15, 0.96) !important;
+  animation: focusme-pulse 1.2s infinite ease-in-out !important;
 }
 
-/* Critical State (< 15s) */
-#focusme-floating-pill.focusme-critical .focusme-pill-content {
-  border-color: rgba(239, 68, 68, 0.8) !important;
-  box-shadow: 0 0 25px rgba(239, 68, 68, 0.5) !important;
-  animation: focusme-pulse 1s infinite alternate !important;
-}
-
-#focusme-floating-pill.focusme-critical .focusme-pill-icon {
+.focusme-pill-container.focusme-critical .focusme-pill-icon {
+  background: rgba(239, 68, 68, 0.25) !important;
   color: #ef4444 !important;
 }
 
-#focusme-floating-pill.focusme-critical .focusme-pill-time {
-  color: #fecaca !important;
-}
-
-#focusme-floating-pill.focusme-critical .focusme-pill-label {
-  color: #fca5a5 !important;
+.focusme-pill-container.focusme-critical .focusme-pill-time {
+  color: #f87171 !important;
 }
 
 @keyframes focusme-pulse {
-  0% {
-    transform: scale(1);
-  }
-  100% {
-    transform: scale(1.04);
-  }
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { transform: scale(1.03); box-shadow: 0 0 15px 2px rgba(239, 68, 68, 0.4); }
 }
 
 /* Minimized State */
-#focusme-floating-pill.focusme-minimized .focusme-pill-body,
-#focusme-floating-pill.focusme-minimized .focusme-pill-toggle {
+.focusme-pill-container.focusme-minimized .focusme-pill-body,
+.focusme-pill-container.focusme-minimized .focusme-pill-toggle {
   display: none !important;
 }
 
-#focusme-floating-pill.focusme-minimized .focusme-pill-content {
-  padding: 8px !important;
+.focusme-pill-container.focusme-minimized .focusme-pill-content {
+  padding: 6px !important;
   border-radius: 50% !important;
   cursor: pointer !important;
-}
-
-/* =========================================================================
-   Facebook Reels Blocker CSS
-   Hides Reels sidebar tabs, Reels feed trays, Reels cards, and video carousels
-   ========================================================================= */
-
-/* Hide Reels sidebar navigation item */
-a[href*="/reel/"],
-a[href*="/reels/"],
-a[aria-label="Reels"],
-a[aria-label="reels"],
-div[aria-label="Reels"],
-div[aria-label="reels"] {
-  display: none !important;
-}
-
-/* Hide Reels trays / carousels in the News Feed */
-div[data-pagelet*="Reel"],
-div[data-pagelet*="reel"],
-div[aria-label*="Reels and short videos" i],
-div[aria-label*="Reels" i],
-div[role="feed"] > div:has(a[href*="/reel/"]),
-div[role="feed"] > div:has(a[href*="/reels/"]),
-div[role="feed"] > div:has(div[aria-label*="Reels" i]) {
-  display: none !important;
 }

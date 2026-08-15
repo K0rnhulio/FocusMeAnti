@@ -1,12 +1,12 @@
 /**
  * FocusMe - Cross-Browser Hourly Site Limiter
  * Background Engine (Chrome MV3 & Firefox/Zen MV3)
- * Active Window: 1:00 PM (13:00) - 9:00 PM (21:00)
+ * Active Window: 10:00 AM (10:00) - 9:00 PM (21:00)
  * Mindful 30-min Reflection Prompt Requirement
  */
 
 const DEFAULT_QUOTA_SECONDS = 300; // 5 minutes per hour
-const ALLOWED_START_HOUR = 13; // 1:00 PM (13:00)
+const ALLOWED_START_HOUR = 10; // 10:00 AM (10:00)
 const ALLOWED_END_HOUR = 21;   // 9:00 PM (21:00)
 
 const DEFAULT_BLOCKED_DOMAINS = [
@@ -27,7 +27,7 @@ function getCurrentHourKey() {
   return `${year}-${month}-${day}-${hour}`;
 }
 
-// Check if current local time is within the allowed 1PM - 9PM daily window
+// Check if current local time is within the allowed 10AM - 9PM daily window
 function isWithinPermittedHours(date = new Date()) {
   const currentHour = date.getHours();
   return currentHour >= ALLOWED_START_HOUR && currentHour < ALLOWED_END_HOUR;
@@ -40,13 +40,13 @@ function getNextUnlockInfo(date = new Date()) {
   if (!isWithinPermittedHours(date)) {
     const target = new Date(date.getFullYear(), date.getMonth(), date.getDate(), ALLOWED_START_HOUR, 0, 0, 0);
     if (currentHour >= ALLOWED_END_HOUR) {
-      target.setDate(target.getDate() + 1); // Tomorrow at 13:00
+      target.setDate(target.getDate() + 1); // Tomorrow at 10:00 AM
     }
     const secondsRemaining = Math.max(0, Math.floor((target.getTime() - date.getTime()) / 1000));
     return {
       isPermitted: false,
       secondsRemaining,
-      targetTimeStr: '1:00 PM (13:00)',
+      targetTimeStr: '10:00 AM (10:00)',
       targetTimestamp: target.getTime(),
       reason: 'outside_window'
     };
@@ -187,7 +187,7 @@ async function checkAndBlockTab(tabId, url) {
 
   const state = await getState();
   if (isBlockedUrl(url, state.blockedDomains)) {
-    // 1. Outside 1PM - 9PM: completely blocked
+    // 1. Outside 10AM - 9PM: completely blocked
     if (!isWithinPermittedHours()) {
       const blockedPageUrl = chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(url)}`);
       chrome.tabs.update(tabId, { url: blockedPageUrl }).catch(() => {});
@@ -228,7 +228,7 @@ async function handleHeartbeatTick(url, senderTab) {
     return { remaining: 0, quota: state.quotaSeconds, hourKey, showPill: false, blocked: false, isPermitted };
   }
 
-  // Outside 1PM - 9PM: Block immediately
+  // Outside 10AM - 9PM: Block immediately
   if (!isPermitted) {
     updateBadge(0, false);
     blockAllMatchingTabs(state.blockedDomains);
@@ -368,7 +368,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// WebNavigation listeners (intercept navigations & Single Page App history transitions)
+// WebNavigation listeners
 if (chrome.webNavigation) {
   if (chrome.webNavigation.onBeforeNavigate) {
     chrome.webNavigation.onBeforeNavigate.addListener((details) => {
