@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deep Work Check-in • FocusMe</title>
+  <link rel="stylesheet" href="reflection.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Ambient background lighting -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-grid"></div>
+
+  <div class="reflection-wrapper">
+    <!-- Main Focus Card -->
+    <main class="focus-card">
+      <!-- Shield / Focus Icon Header -->
+      <header class="card-header">
+        <div class="shield-badge">
+          <div class="pulse-ring"></div>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            <polyline points="9 12 11 14 15 10"></polyline>
+          </svg>
+        </div>
+        
+        <div class="header-tags">
+          <span class="session-tag">5-Minute Allowance Gateway</span>
+          <span class="schedule-tag">1:00 PM – 9:00 PM Window</span>
+        </div>
+
+        <h1 class="headline">Pause & Be Intentional</h1>
+        <p class="subheadline">Before dipping into social media, take 10 seconds to acknowledge your progress.</p>
+      </header>
+
+      <!-- Target Destination Badge -->
+      <div class="destination-banner" id="destination-banner" style="display: none;">
+        <span class="dest-label">Attempting to visit:</span>
+        <span class="dest-host" id="destination-host">--</span>
+      </div>
+
+      <!-- Main Input Section -->
+      <section class="input-section">
+        <div class="prompt-header">
+          <label for="reflection-input" class="prompt-title">
+            <span class="prompt-num">⚡</span>
+            <span>What have you accomplished in the last 30 minutes?</span>
+          </label>
+        </div>
+
+        <!-- Quick Activity Starters / Tags -->
+        <div class="quick-tags" id="quick-tags">
+          <button type="button" class="tag-btn" data-prefix="Finished coding: ">💻 Coded feature</button>
+          <button type="button" class="tag-btn" data-prefix="Fixed bug: ">🐛 Fixed bug</button>
+          <button type="button" class="tag-btn" data-prefix="Read & studied: ">📚 Studied / Read</button>
+          <button type="button" class="tag-btn" data-prefix="Wrote & planned: ">✍️ Planned / Wrote</button>
+          <button type="button" class="tag-btn" data-prefix="Handled emails & messages: ">📧 Handled emails</button>
+        </div>
+
+        <div class="textarea-container">
+          <textarea 
+            id="reflection-input" 
+            placeholder="Type at least one sentence about what you completed or made progress on..." 
+            rows="3"
+            autofocus
+            spellcheck="false"
+          ></textarea>
+          
+          <div class="textarea-status-bar">
+            <div class="status-indicator">
+              <span class="indicator-dot" id="indicator-dot"></span>
+              <span class="indicator-text" id="indicator-text">Waiting for your reflection...</span>
+            </div>
+            <div class="char-badge" id="char-badge">
+              <span id="char-count">0</span> / 15 chars
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Motivational Quote Banner -->
+      <section class="quote-card">
+        <div class="quote-icon">“</div>
+        <p class="quote-body" id="quote-body">Focus is not about doing everything; it is about protecting your attention for what truly matters.</p>
+      </section>
+
+      <!-- Action Buttons -->
+      <div class="action-grid">
+        <button id="stay-focused-btn" class="btn-stay-focused">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span>Nevermind, Stay in Flow</span>
+          <kbd class="shortcut-key">ESC</kbd>
+        </button>
+
+        <button id="submit-btn" class="btn-unlock" disabled>
+          <span>Claim 5-Min Break</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+          <kbd class="shortcut-key">↵</kbd>
+        </button>
+      </div>
+
+      <!-- Card Footer Stats -->
+      <footer class="card-footer">
+        <div class="footer-stat">
+          <span class="dot-live"></span>
+          <span>Hourly Allowance: <strong>5m 00s</strong> (Combined)</span>
+        </div>
+        <div class="footer-stat">
+          <span>Resets at top of the hour</span>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <script src="reflection.js"></script>
+</body>
+</html>

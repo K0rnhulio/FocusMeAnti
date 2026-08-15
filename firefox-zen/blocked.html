@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Locked - FocusMe</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <div class="background-glow"></div>
+
+  <main class="card">
+    <header class="card-header">
+      <div class="brand-badge">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>FocusMe Limiter</span>
+      </div>
+      <h1 class="main-title" id="main-title">Access Locked</h1>
+      <p class="subtitle" id="subtitle-text">Twitter/X, Reddit, and Facebook are only available between 1:00 PM and 9:00 PM.</p>
+    </header>
+
+    <section class="timer-section">
+      <div class="timer-container">
+        <div class="timer-label" id="timer-label">Unlocks In</div>
+        <div class="countdown-display" id="countdown-text">--:--:--</div>
+        <div class="target-time-label" id="target-time-text">at 1:00 PM (13:00)</div>
+        
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-card">
+      <div class="info-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+      </div>
+      <div class="info-text">
+        <p class="info-title" id="info-title">Daily Schedule: 1:00 PM – 9:00 PM</p>
+        <p class="info-desc" id="info-desc">During active hours (13:00 - 21:00), you receive 5 minutes per clock hour. Outside this window, access is completely blocked.</p>
+      </div>
+    </section>
+
+    <div class="quote-box" id="quote-container">
+      <span class="quote-symbol">“</span>
+      <p class="quote-text" id="quote-text">Focus is a muscle. Every time you step away from distraction, it grows stronger.</p>
+    </div>
+
+    <section class="action-section">
+      <label class="toggle-control">
+        <input type="checkbox" id="auto-return-checkbox" checked>
+        <span class="toggle-label">Auto-return to website when unlocked</span>
+      </label>
+
+      <div class="target-site-badge" id="target-site-container" style="display: none;">
+        <span>Destination: </span>
+        <code id="target-site-name">--</code>
+      </div>
+    </section>
+  </main>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

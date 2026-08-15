@@ -1,0 +1,163 @@
+/**
+ * FocusMe - In-Page Live Time Pill Styling & Facebook Reels Blocker
+ */
+
+#focusme-floating-pill {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  color: #f8fafc !important;
+  user-select: none !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+#focusme-floating-pill .focusme-pill-content {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 14px !important;
+  background: rgba(15, 23, 42, 0.88) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
+  cursor: default !important;
+}
+
+#focusme-floating-pill .focusme-pill-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #38bdf8 !important;
+}
+
+#focusme-floating-pill .focusme-pill-body {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+}
+
+#focusme-floating-pill .focusme-pill-time {
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.5px !important;
+  font-variant-numeric: tabular-nums !important;
+  color: #ffffff !important;
+}
+
+#focusme-floating-pill .focusme-pill-label {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+  text-transform: lowercase !important;
+}
+
+#focusme-floating-pill .focusme-pill-toggle {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 2px !important;
+  margin-left: 2px !important;
+  cursor: pointer !important;
+  color: #64748b !important;
+  border-radius: 50% !important;
+  transition: color 0.15s ease !important;
+}
+
+#focusme-floating-pill .focusme-pill-toggle:hover {
+  color: #f1f5f9 !important;
+}
+
+/* Warning State (< 60s) */
+#focusme-floating-pill.focusme-warn .focusme-pill-content {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3) !important;
+}
+
+#focusme-floating-pill.focusme-warn .focusme-pill-icon {
+  color: #f59e0b !important;
+}
+
+#focusme-floating-pill.focusme-warn .focusme-pill-time {
+  color: #fef08a !important;
+}
+
+#focusme-floating-pill.focusme-warn .focusme-pill-label {
+  color: #fcd34d !important;
+}
+
+/* Critical State (< 15s) */
+#focusme-floating-pill.focusme-critical .focusme-pill-content {
+  border-color: rgba(239, 68, 68, 0.8) !important;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.5) !important;
+  animation: focusme-pulse 1s infinite alternate !important;
+}
+
+#focusme-floating-pill.focusme-critical .focusme-pill-icon {
+  color: #ef4444 !important;
+}
+
+#focusme-floating-pill.focusme-critical .focusme-pill-time {
+  color: #fecaca !important;
+}
+
+#focusme-floating-pill.focusme-critical .focusme-pill-label {
+  color: #fca5a5 !important;
+}
+
+@keyframes focusme-pulse {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.04);
+  }
+}
+
+/* Minimized State */
+#focusme-floating-pill.focusme-minimized .focusme-pill-body,
+#focusme-floating-pill.focusme-minimized .focusme-pill-toggle {
+  display: none !important;
+}
+
+#focusme-floating-pill.focusme-minimized .focusme-pill-content {
+  padding: 8px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+}
+
+/* =========================================================================
+   Facebook Reels Blocker CSS
+   Hides Reels sidebar tabs, Reels feed trays, Reels cards, and video carousels
+   ========================================================================= */
+
+/* Hide Reels sidebar navigation item */
+a[href*="/reel/"],
+a[href*="/reels/"],
+a[aria-label="Reels"],
+a[aria-label="reels"],
+div[aria-label="Reels"],
+div[aria-label="reels"] {
+  display: none !important;
+}
+
+/* Hide Reels trays / carousels in the News Feed */
+div[data-pagelet*="Reel"],
+div[data-pagelet*="reel"],
+div[aria-label*="Reels and short videos" i],
+div[aria-label*="Reels" i],
+div[role="feed"] > div:has(a[href*="/reel/"]),
+div[role="feed"] > div:has(a[href*="/reels/"]),
+div[role="feed"] > div:has(div[aria-label*="Reels" i]) {
+  display: none !important;
+}

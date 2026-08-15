@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "FocusMe - Hourly Site Limiter",
+  "version": "1.0.2",
+  "description": "Restricts combined time on Twitter/X, Reddit, and Facebook to 5 minutes per hour with zero rollover and 30-min reflection prompts.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FocusMe Status",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "idle",
+    "alarms",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "*://*.twitter.com/*",
+    "*://twitter.com/*",
+    "*://*.x.com/*",
+    "*://x.com/*",
+    "*://*.reddit.com/*",
+    "*://reddit.com/*",
+    "*://*.facebook.com/*",
+    "*://facebook.com/*",
+    "*://*.fb.com/*",
+    "*://fb.com/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.twitter.com/*",
+        "*://twitter.com/*",
+        "*://*.x.com/*",
+        "*://x.com/*",
+        "*://*.reddit.com/*",
+        "*://reddit.com/*",
+        "*://*.facebook.com/*",
+        "*://facebook.com/*",
+        "*://*.fb.com/*",
+        "*://fb.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["blocked.html", "reflection.html", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

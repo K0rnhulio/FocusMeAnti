@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusMe Dashboard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <span class="brand-name">FocusMe</span>
+      </div>
+      <div class="current-hour-tag" id="current-hour-tag">
+        <span class="pulse-dot" id="pulse-dot"></span>
+        <span id="hour-window-text">1:00 PM – 9:00 PM</span>
+      </div>
+    </header>
+
+    <!-- Main Circular Progress Hero -->
+    <section class="hero-card">
+      <div class="progress-ring-container">
+        <svg class="progress-ring" width="130" height="130">
+          <circle class="progress-ring-track" cx="65" cy="65" r="54" />
+          <circle class="progress-ring-fill" id="ring-fill" cx="65" cy="65" r="54" />
+        </svg>
+        <div class="progress-ring-inner">
+          <span class="time-main" id="remaining-time-text">--:--</span>
+          <span class="time-sub" id="remaining-time-sub">/ 5m allowance</span>
+        </div>
+      </div>
+
+      <div class="status-badge" id="status-badge">
+        <span class="status-indicator"></span>
+        <span id="status-text">Loading...</span>
+      </div>
+
+      <p class="reset-hint" id="reset-hint">
+        Schedule: Active 1:00 PM – 9:00 PM only
+      </p>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="sites">Blocked Sites</button>
+      <button class="tab-btn" data-tab="stats">Stats & Log</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- Tab 1: Sites -->
+    <section class="tab-content active" id="tab-sites">
+      <div class="domains-list" id="domains-list">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="add-domain-row">
+        <input type="text" id="new-domain-input" placeholder="e.g. instagram.com" spellcheck="false">
+        <button id="add-domain-btn">Add</button>
+      </div>
+    </section>
+
+    <!-- Tab 2: Stats & Reflections -->
+    <section class="tab-content" id="tab-stats">
+      <div class="stats-summary">
+        <div class="stat-box">
+          <span class="stat-label">Used This Hour</span>
+          <span class="stat-value" id="stat-used-hour">0m 00s</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Total Today</span>
+          <span class="stat-value" id="stat-used-today">0m 00s</span>
+        </div>
+      </div>
+      
+      <div class="hourly-chart-container">
+        <div class="chart-header">
+          <span>Hourly Activity (1PM - 9PM active)</span>
+          <span class="chart-legend">Max 5m/h</span>
+        </div>
+        <div class="hourly-bars" id="hourly-bars">
+          <!-- 24 hourly bars generated dynamically -->
+        </div>
+      </div>
+
+      <div class="reflections-container">
+        <div class="chart-header">
+          <span>Today's 30-Min Check-in Log</span>
+          <span id="reflection-count-badge" class="chart-legend">0 entries</span>
+        </div>
+        <div class="reflections-list" id="reflections-list">
+          <div class="reflection-empty">No check-ins logged yet today.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Settings -->
+    <section class="tab-content" id="tab-settings">
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-title">Floating Timer Pill</span>
+          <span class="setting-desc">Show live countdown pill on blocked sites</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="setting-show-pill" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-title">Auto-Return on Reset</span>
+          <span class="setting-desc">Automatically return to site when unlocked</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="setting-auto-redirect" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-title">Active Daily Schedule</span>
+          <span class="setting-desc">Locked outside 1:00 PM - 9:00 PM</span>
+        </div>
+        <span style="font-size: 11px; font-weight: 600; color: #38bdf8;">13:00 - 21:00</span>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <span class="setting-title">Mindful Check-in</span>
+          <span class="setting-desc">Requires answering "What have you done the last 30min"</span>
+        </div>
+        <span style="font-size: 11px; font-weight: 600; color: #10b981;">Active</span>
+      </div>
+
+      <div class="debug-actions">
+        <button id="reset-current-hour-btn" class="btn-secondary">Reset Current Hour Allowance (Test)</button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>FocusMe • Twitter/X, Reddit, Facebook</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
