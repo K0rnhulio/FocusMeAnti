@@ -30,13 +30,13 @@ class FocusAccessibilityService : AccessibilityService() {
     private var heartbeatJob: Job? = null
     private var currentForegroundPackage = ""
     private var lastBlockedTimestamp = 0L
+    private var lastZaloRedirectTimestamp = 0L
 
     private val hourFormat = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault())
 
     companion object {
         private const val TAG = "FocusAccessibility"
-        
-        // Multi-browser package names
+
         val BROWSER_PACKAGES = setOf(
             "com.android.chrome",
             "com.sec.android.app.sbrowser",
@@ -47,7 +47,6 @@ class FocusAccessibilityService : AccessibilityService() {
             "com.duckduckgo.mobile.android"
         )
 
-        // Blocked web domains
         val BLOCKED_DOMAINS = listOf(
             "reddit.com",
             "twitter.com",
@@ -61,21 +60,19 @@ class FocusAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or 
-                         AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or 
-                         AccessibilityEvent.TYPE_VIEW_CLICKED
+            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 50
+            notificationTimeout = 20
         }
         serviceInfo = info
 
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, "🛡️ FocusMe Protection Active!", Toast.LENGTH_SHORT).show()
         }
-        Log.d(TAG, "FocusAccessibilityService connected and active!")
+        Log.d(TAG, "FocusAccessibilityService connected with ALL_MASK flags")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -83,14 +80,16 @@ class FocusAccessibilityService : AccessibilityService() {
 
         val packageName = event.packageName?.toString() ?: return
 
-        // 1. WhatsApp Status & Updates Shield
-        if (packageName.contains("whatsapp")) {
-            handleWhatsAppStatusShield(rootInActiveWindow)
+        // 1. Zalo Comprehensive Newsfeed, Stories & Video Blocker
+        if (packageName.contains("zalo")) {
+            handleZaloCompleteFeedShield(rootInActiveWindow, event)
+            return
         }
 
-        // 2. Comprehensive Zalo Newsfeed & Discovery & Video Shield
-        if (packageName.contains("zalo")) {
-            handleZaloCompleteFeedShield(rootInActiveWindow)
+        // 2. WhatsApp Status & Updates Shield
+        if (packageName.contains("whatsapp")) {
+            handleWhatsAppStatusShield(rootInActiveWindow)
+            return
         }
 
         // 3. Browser URL Interception (Chrome, Samsung Internet, Firefox...)
@@ -109,6 +108,103 @@ class FocusAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Aggressive Zalo Feed Blocker:
+     * Scans for any Feed/Timeline/Video/Discovery views or clicks and instantly redirects to "Tin nhắn" (Chats).
+     */
+    private fun handleZaloCompleteFeedShield(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent) {
+        val now = System.currentTimeMillis()
+        if (now - lastZaloRedirectTimestamp < 350) return // Prevent infinite loop spam
+
+        serviceScope.launch {
+            val isEnabled = FocusMeApp.instance.preferences.zaloVideoBlock.first()
+            if (!isEnabled) return@launch
+
+            // Check if clicked element was a feed tab
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                val clickedText = event.text?.joinToString(" ") ?: ""
+                val clickedDesc = event.contentDescription?.toString() ?: ""
+                val combined = "$clickedText $clickedDesc".toLowerCase(Locale.getDefault())
+
+                if (combined.contains("nhật ký") || combined.contains("khám phá") || 
+                    combined.contains("timeline") || combined.contains("khoảnh khắc") || 
+                    combined.contains("video")) {
+                    
+                    lastZaloRedirectTimestamp = now
+                    redirectToZaloChats(rootNode)
+                    return@launch
+                }
+            }
+
+            // Inspect entire view tree for active feed elements
+            if (rootNode != null && isZaloFeedVisible(rootNode)) {
+                lastZaloRedirectTimestamp = now
+                redirectToZaloChats(rootNode)
+            }
+        }
+    }
+
+    private fun isZaloFeedVisible(node: AccessibilityNodeInfo): Boolean {
+        // Collect text and content descriptions recursively
+        val feedKeywords = listOf(
+            "nhật ký", "khám phá", "khoảnh khắc", "bảng tin", 
+            "hôm nay bạn thế nào", "thích", "bình luận", "tạo bài viết",
+            "video", "shorts", "reels", "tin mới", "timeline"
+        )
+
+        val nodeText = node.text?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
+        val nodeDesc = node.contentDescription?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
+        val viewId = node.viewIdResourceName?.toLowerCase(Locale.getDefault()) ?: ""
+
+        // Check if header or selected tab is feed
+        if ((node.isSelected || node.isFocused) && 
+            (nodeText.contains("nhật ký") || nodeText.contains("khám phá") || 
+             nodeDesc.contains("nhật ký") || nodeDesc.contains("khám phá"))) {
+            return true
+        }
+
+        if (viewId.contains("tab_timeline") || viewId.contains("tab_discovery") || 
+            viewId.contains("feed_recycler") || viewId.contains("layout_timeline")) {
+            return true
+        }
+
+        // Recursively check children
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            if (isZaloFeedVisible(child)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun redirectToZaloChats(rootNode: AccessibilityNodeInfo?) {
+        if (rootNode == null) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return
+        }
+
+        // Look for "Tin nhắn" or "Messages" tab and click it
+        val chatKeywords = listOf("Tin nhắn", "Messages", "Chats", "Trò chuyện")
+        for (kw in chatKeywords) {
+            val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
+            for (node in nodes) {
+                // Click the tab node or its clickable parent
+                var target: AccessibilityNodeInfo? = node
+                while (target != null && !target.isClickable) {
+                    target = target.parent
+                }
+                if (target != null && target.isClickable) {
+                    target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    return
+                }
+            }
+        }
+
+        // Fallback: press Back button
+        performGlobalAction(GLOBAL_ACTION_BACK)
+    }
+
     private fun handleWhatsAppStatusShield(rootNode: AccessibilityNodeInfo?) {
         if (rootNode == null) return
         serviceScope.launch {
@@ -120,7 +216,6 @@ class FocusAccessibilityService : AccessibilityService() {
                 val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
                 for (node in nodes) {
                     if (node.isSelected || node.isFocused) {
-                        // Return to Chats tab
                         val chatKeywords = listOf("Chats", "Trò chuyện", "Tin nhắn", "Mensajes")
                         var redirected = false
                         for (ckw in chatKeywords) {
@@ -141,67 +236,9 @@ class FocusAccessibilityService : AccessibilityService() {
         }
     }
 
-    /**
-     * Complete Newsfeed & Discovery Blocker for Zalo:
-     * Blocks Tab "Nhật ký" (Newsfeed / Stories / Timeline) and Tab "Khám phá" (Discover / Videos / News)
-     * Keeps Zalo strictly in "Tin nhắn" (Chats) or "Danh bạ" (Contacts).
-     */
-    private fun handleZaloCompleteFeedShield(rootNode: AccessibilityNodeInfo?) {
-        if (rootNode == null) return
-        serviceScope.launch {
-            val isEnabled = FocusMeApp.instance.preferences.zaloVideoBlock.first()
-            if (!isEnabled) return@launch
-
-            val blockedFeedKeywords = listOf(
-                "Nhật ký",
-                "Khám phá",
-                "Timeline",
-                "Khoảnh khắc",
-                "Bảng tin",
-                "Video",
-                "Shorts",
-                "Discover",
-                "Feed",
-                "Tin mới"
-            )
-
-            var isFeedActive = false
-
-            for (kw in blockedFeedKeywords) {
-                val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
-                for (node in nodes) {
-                    // If the tab is selected or the view is in the foreground
-                    if (node.isSelected || node.isFocused || node.className?.contains("ViewPager") == true) {
-                        isFeedActive = true
-                        break
-                    }
-                }
-                if (isFeedActive) break
-            }
-
-            if (isFeedActive) {
-                // Force bounce to "Tin nhắn" (Chats)
-                val chatKeywords = listOf("Tin nhắn", "Messages", "Chats")
-                var redirected = false
-                for (mkw in chatKeywords) {
-                    val msgNodes = rootNode.findAccessibilityNodeInfosByText(mkw)
-                    if (msgNodes.isNotEmpty()) {
-                        msgNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        redirected = true
-                        break
-                    }
-                }
-                if (!redirected) {
-                    performGlobalAction(GLOBAL_ACTION_BACK)
-                }
-            }
-        }
-    }
-
     private fun handleBrowserUrlCheck(rootNode: AccessibilityNodeInfo?, browserPkg: String) {
         if (rootNode == null) return
 
-        // Search for address bar text in browser
         val urlBarIds = listOf(
             "$browserPkg:id/url_bar",
             "$browserPkg:id/location_bar_edit_text",
