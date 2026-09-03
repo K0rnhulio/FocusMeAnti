@@ -65,7 +65,7 @@ class FocusAccessibilityService : AccessibilityService() {
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 20
+            notificationTimeout = 50
         }
         serviceInfo = info
 
@@ -80,15 +80,15 @@ class FocusAccessibilityService : AccessibilityService() {
 
         val packageName = event.packageName?.toString() ?: return
 
-        // 1. Zalo Comprehensive Newsfeed, Stories & Video Blocker
+        // 1. Zalo Feed & Story Shield (Click-intercept & Active tab only)
         if (packageName.contains("zalo")) {
-            handleZaloCompleteFeedShield(rootInActiveWindow, event)
+            handleZaloFeedShield(rootInActiveWindow, event)
             return
         }
 
         // 2. WhatsApp Status & Updates Shield
         if (packageName.contains("whatsapp")) {
-            handleWhatsAppStatusShield(rootInActiveWindow)
+            handleWhatsAppStatusShield(rootInActiveWindow, event)
             return
         }
 
@@ -109,18 +109,23 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Aggressive Zalo Feed Blocker:
-     * Scans for any Feed/Timeline/Video/Discovery views or clicks and instantly redirects to "Tin nhắn" (Chats).
+     * Precise Zalo Feed Blocker:
+     * Intercepts clicks on "Nhật ký" (Timeline) & "Khám phá" (Discover) and forces navigation to "Tin nhắn" (Chats).
+     * NEVER interrupts active 1-on-1 chat rooms or the Messages tab.
      */
-    private fun handleZaloCompleteFeedShield(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent) {
+    private fun handleZaloFeedShield(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent) {
         val now = System.currentTimeMillis()
-        if (now - lastZaloRedirectTimestamp < 350) return // Prevent infinite loop spam
 
         serviceScope.launch {
             val isEnabled = FocusMeApp.instance.preferences.zaloVideoBlock.first()
             if (!isEnabled) return@launch
 
-            // Check if clicked element was a feed tab
+            // Check if inside a direct chat room (Look for message input box)
+            if (rootNode != null && isInsideChatRoom(rootNode)) {
+                return@launch // Real chat message in progress -> DO NOT INTERFERE!
+            }
+
+            // Case A: User clicked directly on a Feed Tab or Feed Story/Video
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val clickedText = event.text?.joinToString(" ") ?: ""
                 val clickedDesc = event.contentDescription?.toString() ?: ""
@@ -130,49 +135,51 @@ class FocusAccessibilityService : AccessibilityService() {
                     combined.contains("timeline") || combined.contains("khoảnh khắc") || 
                     combined.contains("video")) {
                     
-                    lastZaloRedirectTimestamp = now
-                    redirectToZaloChats(rootNode)
+                    if (now - lastZaloRedirectTimestamp > 300) {
+                        lastZaloRedirectTimestamp = now
+                        redirectToZaloChats(rootNode)
+                    }
                     return@launch
                 }
             }
 
-            // Inspect entire view tree for active feed elements
-            if (rootNode != null && isZaloFeedVisible(rootNode)) {
-                lastZaloRedirectTimestamp = now
-                redirectToZaloChats(rootNode)
+            // Case B: User switched to the Timeline / Discover tab (selected/focused tab)
+            if (rootNode != null && isZaloFeedTabSelected(rootNode)) {
+                if (now - lastZaloRedirectTimestamp > 500) {
+                    lastZaloRedirectTimestamp = now
+                    redirectToZaloChats(rootNode)
+                }
             }
         }
     }
 
-    private fun isZaloFeedVisible(node: AccessibilityNodeInfo): Boolean {
-        // Collect text and content descriptions recursively
-        val feedKeywords = listOf(
-            "nhật ký", "khám phá", "khoảnh khắc", "bảng tin", 
-            "hôm nay bạn thế nào", "thích", "bình luận", "tạo bài viết",
-            "video", "shorts", "reels", "tin mới", "timeline"
-        )
+    private fun isInsideChatRoom(rootNode: AccessibilityNodeInfo): Boolean {
+        // Chat rooms contain input fields or send buttons
+        val inputNodes = rootNode.findAccessibilityNodeInfosByViewId("com.zing.zalo:id/chat_input_text")
+        if (inputNodes.isNotEmpty()) return true
 
-        val nodeText = node.text?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
-        val nodeDesc = node.contentDescription?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
-        val viewId = node.viewIdResourceName?.toLowerCase(Locale.getDefault()) ?: ""
+        val sendNodes = rootNode.findAccessibilityNodeInfosByViewId("com.zing.zalo:id/btn_send")
+        if (sendNodes.isNotEmpty()) return true
 
-        // Check if header or selected tab is feed
-        if ((node.isSelected || node.isFocused) && 
-            (nodeText.contains("nhật ký") || nodeText.contains("khám phá") || 
-             nodeDesc.contains("nhật ký") || nodeDesc.contains("khám phá"))) {
-            return true
-        }
+        val hintNodes = rootNode.findAccessibilityNodeInfosByText("Nhập tin nhắn")
+        if (hintNodes.isNotEmpty()) return true
 
-        if (viewId.contains("tab_timeline") || viewId.contains("tab_discovery") || 
-            viewId.contains("feed_recycler") || viewId.contains("layout_timeline")) {
-            return true
-        }
+        return false
+    }
 
-        // Recursively check children
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            if (isZaloFeedVisible(child)) {
-                return true
+    private fun isZaloFeedTabSelected(rootNode: AccessibilityNodeInfo): Boolean {
+        val feedKeywords = listOf("Nhật ký", "Khám phá", "Timeline", "Khoảnh khắc")
+        for (kw in feedKeywords) {
+            val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
+            for (node in nodes) {
+                if (node.isSelected || node.isFocused) {
+                    return true
+                }
+                // Check parent clickable container selection
+                val parent = node.parent
+                if (parent != null && (parent.isSelected || parent.isFocused)) {
+                    return true
+                }
             }
         }
         return false
@@ -184,12 +191,11 @@ class FocusAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Look for "Tin nhắn" or "Messages" tab and click it
-        val chatKeywords = listOf("Tin nhắn", "Messages", "Chats", "Trò chuyện")
+        // Click the "Tin nhắn" or "Messages" tab (Tab 0)
+        val chatKeywords = listOf("Tin nhắn", "Messages", "Chats")
         for (kw in chatKeywords) {
             val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
             for (node in nodes) {
-                // Click the tab node or its clickable parent
                 var target: AccessibilityNodeInfo? = node
                 while (target != null && !target.isClickable) {
                     target = target.parent
@@ -201,39 +207,57 @@ class FocusAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Fallback: press Back button
+        // Fallback: Back button
         performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
-    private fun handleWhatsAppStatusShield(rootNode: AccessibilityNodeInfo?) {
+    private fun handleWhatsAppStatusShield(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent) {
         if (rootNode == null) return
         serviceScope.launch {
             val isEnabled = FocusMeApp.instance.preferences.whatsappStatusBlock.first()
             if (!isEnabled) return@launch
 
-            val keywords = listOf("Status", "Updates", "Cập nhật", "Estado", "Estados")
+            // If user clicked or selected Updates / Status
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                val clickedText = event.text?.joinToString(" ") ?: ""
+                val clickedDesc = event.contentDescription?.toString() ?: ""
+                val combined = "$clickedText $clickedDesc".toLowerCase(Locale.getDefault())
+
+                if (combined.contains("status") || combined.contains("updates") || combined.contains("cập nhật")) {
+                    redirectToWhatsAppChats(rootNode)
+                    return@launch
+                }
+            }
+
+            val keywords = listOf("Status", "Updates", "Cập nhật", "Estado")
             for (kw in keywords) {
                 val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
                 for (node in nodes) {
                     if (node.isSelected || node.isFocused) {
-                        val chatKeywords = listOf("Chats", "Trò chuyện", "Tin nhắn", "Mensajes")
-                        var redirected = false
-                        for (ckw in chatKeywords) {
-                            val chatNodes = rootNode.findAccessibilityNodeInfosByText(ckw)
-                            if (chatNodes.isNotEmpty()) {
-                                chatNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                                redirected = true
-                                break
-                            }
-                        }
-                        if (!redirected) {
-                            performGlobalAction(GLOBAL_ACTION_BACK)
-                        }
+                        redirectToWhatsAppChats(rootNode)
                         return@launch
                     }
                 }
             }
         }
+    }
+
+    private fun redirectToWhatsAppChats(rootNode: AccessibilityNodeInfo) {
+        val chatKeywords = listOf("Chats", "Trò chuyện", "Tin nhắn", "Chats")
+        for (ckw in chatKeywords) {
+            val chatNodes = rootNode.findAccessibilityNodeInfosByText(ckw)
+            for (node in chatNodes) {
+                var target: AccessibilityNodeInfo? = node
+                while (target != null && !target.isClickable) {
+                    target = target.parent
+                }
+                if (target != null && target.isClickable) {
+                    target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    return
+                }
+            }
+        }
+        performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
     private fun handleBrowserUrlCheck(rootNode: AccessibilityNodeInfo?, browserPkg: String) {
