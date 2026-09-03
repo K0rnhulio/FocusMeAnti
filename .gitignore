@@ -19,3 +19,12 @@ node_modules/
 
 # Built zip packages
 *.zip
+
+# Android & Gradle
+.gradle/
+**/build/
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
