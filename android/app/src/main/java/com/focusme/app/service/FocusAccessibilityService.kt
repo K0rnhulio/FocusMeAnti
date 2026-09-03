@@ -83,14 +83,14 @@ class FocusAccessibilityService : AccessibilityService() {
 
         val packageName = event.packageName?.toString() ?: return
 
-        // 1. WhatsApp Status & Updates Shield (Multi-language: English, Vietnamese, Spanish...)
+        // 1. WhatsApp Status & Updates Shield
         if (packageName.contains("whatsapp")) {
             handleWhatsAppStatusShield(rootInActiveWindow)
         }
 
-        // 2. Zalo Video & Timeline / Nhật ký Shield
+        // 2. Comprehensive Zalo Newsfeed & Discovery & Video Shield
         if (packageName.contains("zalo")) {
-            handleZaloVideoShield(rootInActiveWindow)
+            handleZaloCompleteFeedShield(rootInActiveWindow)
         }
 
         // 3. Browser URL Interception (Chrome, Samsung Internet, Firefox...)
@@ -120,8 +120,8 @@ class FocusAccessibilityService : AccessibilityService() {
                 val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
                 for (node in nodes) {
                     if (node.isSelected || node.isFocused) {
-                        // Return to Chats
-                        val chatKeywords = listOf("Chats", "Trò chuyện", "Chats", "Mensajes")
+                        // Return to Chats tab
+                        val chatKeywords = listOf("Chats", "Trò chuyện", "Tin nhắn", "Mensajes")
                         var redirected = false
                         for (ckw in chatKeywords) {
                             val chatNodes = rootNode.findAccessibilityNodeInfosByText(ckw)
@@ -141,33 +141,58 @@ class FocusAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun handleZaloVideoShield(rootNode: AccessibilityNodeInfo?) {
+    /**
+     * Complete Newsfeed & Discovery Blocker for Zalo:
+     * Blocks Tab "Nhật ký" (Newsfeed / Stories / Timeline) and Tab "Khám phá" (Discover / Videos / News)
+     * Keeps Zalo strictly in "Tin nhắn" (Chats) or "Danh bạ" (Contacts).
+     */
+    private fun handleZaloCompleteFeedShield(rootNode: AccessibilityNodeInfo?) {
         if (rootNode == null) return
         serviceScope.launch {
             val isEnabled = FocusMeApp.instance.preferences.zaloVideoBlock.first()
             if (!isEnabled) return@launch
 
-            // Keywords for Video tab and Timeline/Diary feed
-            val blockKeywords = listOf("Video", "Timeline", "Nhật ký", "Khám phá", "Shorts", "Reels")
-            for (kw in blockKeywords) {
+            val blockedFeedKeywords = listOf(
+                "Nhật ký",
+                "Khám phá",
+                "Timeline",
+                "Khoảnh khắc",
+                "Bảng tin",
+                "Video",
+                "Shorts",
+                "Discover",
+                "Feed",
+                "Tin mới"
+            )
+
+            var isFeedActive = false
+
+            for (kw in blockedFeedKeywords) {
                 val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
                 for (node in nodes) {
-                    if (node.isSelected || node.isFocused) {
-                        val msgKeywords = listOf("Tin nhắn", "Messages", "Chats")
-                        var redirected = false
-                        for (mkw in msgKeywords) {
-                            val msgNodes = rootNode.findAccessibilityNodeInfosByText(mkw)
-                            if (msgNodes.isNotEmpty()) {
-                                msgNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                                redirected = true
-                                break
-                            }
-                        }
-                        if (!redirected) {
-                            performGlobalAction(GLOBAL_ACTION_BACK)
-                        }
-                        return@launch
+                    // If the tab is selected or the view is in the foreground
+                    if (node.isSelected || node.isFocused || node.className?.contains("ViewPager") == true) {
+                        isFeedActive = true
+                        break
                     }
+                }
+                if (isFeedActive) break
+            }
+
+            if (isFeedActive) {
+                // Force bounce to "Tin nhắn" (Chats)
+                val chatKeywords = listOf("Tin nhắn", "Messages", "Chats")
+                var redirected = false
+                for (mkw in chatKeywords) {
+                    val msgNodes = rootNode.findAccessibilityNodeInfosByText(mkw)
+                    if (msgNodes.isNotEmpty()) {
+                        msgNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        redirected = true
+                        break
+                    }
+                }
+                if (!redirected) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)
                 }
             }
         }

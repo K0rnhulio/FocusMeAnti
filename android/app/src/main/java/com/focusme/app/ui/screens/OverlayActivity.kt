@@ -1,6 +1,7 @@
 package com.focusme.app.ui.screens
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.focusme.app.ui.theme.AccentCyan
 import com.focusme.app.ui.theme.AccentIndigo
 import com.focusme.app.ui.theme.AccentRose
 import com.focusme.app.ui.theme.BgDark
@@ -45,6 +48,7 @@ class OverlayActivity : ComponentActivity() {
 
         val reason = intent.getStringExtra("overlay_reason") ?: "quota_exhausted"
         val targetPkg = intent.getStringExtra("target_package") ?: ""
+        val isWebTarget = targetPkg.startsWith("web:")
 
         setContent {
             FocusMeTheme {
@@ -58,27 +62,41 @@ class OverlayActivity : ComponentActivity() {
                                 finish()
                             },
                             onCancel = {
-                                goToHomeScreen()
+                                if (isWebTarget) openGoogleSearch() else goToHomeScreen()
                             }
                         )
                     }
                     "outside_schedule" -> {
+                        val siteName = if (isWebTarget) targetPkg.removePrefix("web:") else "This app"
                         LockedScreen(
                             title = "Outside Allowed Hours",
-                            description = "Social media and distracting apps are completely locked before 10:00 AM and after 9:00 PM.",
+                            description = "$siteName is completely locked before 10:00 AM and after 9:00 PM.",
+                            isWebTarget = isWebTarget,
+                            onOpenGoogle = { openGoogleSearch() },
                             onClose = { goToHomeScreen() }
                         )
                     }
                     else -> {
+                        val siteName = if (isWebTarget) targetPkg.removePrefix("web:") else "This app"
                         LockedScreen(
                             title = "Hourly Quota Exhausted",
-                            description = "You have used your 5-minute combined allowance for this clock hour. Zero rollover.",
+                            description = "You have used your 5-minute combined allowance for $siteName for this clock hour.",
+                            isWebTarget = isWebTarget,
+                            onOpenGoogle = { openGoogleSearch() },
                             onClose = { goToHomeScreen() }
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun openGoogleSearch() {
+        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        startActivity(browserIntent)
+        finish()
     }
 
     private fun goToHomeScreen() {
@@ -95,6 +113,8 @@ class OverlayActivity : ComponentActivity() {
 fun LockedScreen(
     title: String,
     description: String,
+    isWebTarget: Boolean,
+    onOpenGoogle: () -> Unit,
     onClose: () -> Unit
 ) {
     Box(
@@ -130,15 +150,39 @@ fun LockedScreen(
                 lineHeight = 20.sp
             )
             Spacer(modifier = Modifier.height(24.dp))
-            Button(
-                onClick = onClose,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Text("Return to Home", fontWeight = FontWeight.Bold)
+
+            if (isWebTarget) {
+                Button(
+                    onClick = onOpenGoogle,
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text("🔍 Open Google Search Instead", fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onClose,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text("Return to Home Screen", color = TextDim)
+                }
+            } else {
+                Button(
+                    onClick = onClose,
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text("Return to Home Screen", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
