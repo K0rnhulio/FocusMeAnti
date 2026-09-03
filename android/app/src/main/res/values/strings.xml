@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">FocusMe</string>
+    <string name="accessibility_service_description">Enforces intentional hourly limits on distracting social media apps, shields WhatsApp Status and Zalo Video doomscrolling, and displays the mindful reflection overlay.</string>
+    <string name="notification_service_description">Detects incoming WhatsApp and Zalo messages after 9:00 PM to activate a 3-minute reactive reply window.</string>
+</resources>

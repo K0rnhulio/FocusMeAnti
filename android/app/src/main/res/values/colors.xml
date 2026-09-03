@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black_bg">#080C14</color>
+    <color name="card_dark">#0F172A</color>
+    <color name="accent_indigo">#6366F1</color>
+    <color name="accent_cyan">#38BDF8</color>
+    <color name="accent_emerald">#10B981</color>
+</resources>
