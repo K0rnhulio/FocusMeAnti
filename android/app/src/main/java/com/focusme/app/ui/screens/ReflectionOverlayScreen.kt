@@ -1,6 +1,10 @@
 package com.focusme.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,11 +15,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -28,6 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,13 +51,17 @@ import com.focusme.app.data.model.HourlyUsage
 import com.focusme.app.data.model.ReflectionEntry
 import com.focusme.app.ui.theme.AccentCyan
 import com.focusme.app.ui.theme.AccentEmerald
+import com.focusme.app.ui.theme.AccentEmeraldGlow
 import com.focusme.app.ui.theme.AccentIndigo
+import com.focusme.app.ui.theme.AccentViolet
 import com.focusme.app.ui.theme.BgDark
 import com.focusme.app.ui.theme.CardDark
 import com.focusme.app.ui.theme.CardInner
+import com.focusme.app.ui.theme.PrimaryGradient
 import com.focusme.app.ui.theme.TextDim
 import com.focusme.app.ui.theme.TextMain
 import com.focusme.app.ui.theme.TextMuted
+import com.focusme.app.ui.theme.glassCard
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,61 +77,72 @@ fun ReflectionOverlayScreen(
     var reflectionText by remember { mutableStateOf("") }
     val minChars = 15
     val isValid = reflectionText.trim().length >= minChars
+    val charProgress = (reflectionText.trim().length.toFloat() / minChars).coerceIn(0f, 1f)
 
     val quickTags = listOf(
-        "💻 Coded feature: ",
-        "🐛 Fixed bug: ",
-        "📚 Studied: ",
-        "✍️ Wrote docs: ",
-        "📧 Handled emails: "
+        "💻 Coded feature",
+        "🐛 Fixed bug",
+        "📚 Studied / Read",
+        "✍️ Planned & Wrote",
+        "📧 Client emails"
     )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
-            .padding(24.dp),
+            .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(CardDark)
+                .glassCard(cornerRadius = 28.dp, elevation = 20.dp)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Badge
-            Box(
+            // Header Badge
+            Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(9999.dp))
                     .background(AccentIndigo.copy(alpha = 0.15f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .border(1.dp, AccentIndigo.copy(alpha = 0.3f), RoundedCornerShape(9999.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    imageVector = Icons.Rounded.Psychology,
+                    contentDescription = null,
+                    tint = AccentCyan,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "INTENTIONAL PAUSE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AccentCyan
+                    text = "MINDFUL REFLECTION GATE",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = AccentCyan,
+                    letterSpacing = 0.8.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "What have you done the last 30 minutes?",
+                text = "What have you accomplished in the last 30 minutes?",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextMain
+                color = TextMain,
+                lineHeight = 24.sp
             )
             Text(
-                text = "Take 10 seconds to acknowledge your progress before opening social media.",
-                fontSize = 13.sp,
+                text = "Acknowledge real-world progress before opening social feeds.",
+                fontSize = 12.sp,
                 color = TextMuted,
-                modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
             )
 
-            // Quick Tags
+            // Interactive Quick Tags
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -121,69 +150,98 @@ fun ReflectionOverlayScreen(
                 items(quickTags) { tag ->
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(CardInner)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CardInner.copy(alpha = 0.7f))
+                            .border(1.dp, Color(0x22475569), RoundedCornerShape(10.dp))
                             .clickable {
-                                if (!reflectionText.startsWith(tag)) {
-                                    reflectionText = tag + reflectionText
+                                if (!reflectionText.contains(tag)) {
+                                    reflectionText = "$tag: $reflectionText".trim()
                                 }
                             }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
-                        Text(tag.trim(), fontSize = 11.sp, color = TextMain)
+                        Text(tag, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = TextMain)
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Input Field
+            // Modern Text Input
             OutlinedTextField(
                 value = reflectionText,
                 onValueChange = { reflectionText = it },
-                placeholder = { Text("Describe what you completed...", color = TextDim, fontSize = 13.sp) },
+                placeholder = {
+                    Text(
+                        "e.g. Finished the project summary and answered team messages...",
+                        color = TextDim,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(110.dp),
+                    .height(115.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AccentIndigo,
+                    focusedBorderColor = AccentCyan,
                     unfocusedBorderColor = CardInner,
+                    focusedContainerColor = Color(0x66060913),
+                    unfocusedContainerColor = Color(0x66060913),
                     focusedTextColor = TextMain,
                     unfocusedTextColor = TextMain
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             )
 
-            // Counter status
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = if (isValid) "✓ Ready to unlock!" else "Need ${minChars - reflectionText.trim().length} more chars",
-                    fontSize = 11.sp,
-                    color = if (isValid) AccentEmerald else TextDim
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Progress Bar & Char Counter
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LinearProgressIndicator(
+                    progress = { charProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = if (isValid) AccentEmerald else AccentCyan,
+                    trackColor = CardInner
                 )
-                Text(
-                    text = "${reflectionText.trim().length} / $minChars",
-                    fontSize = 11.sp,
-                    color = if (isValid) AccentEmerald else TextDim
-                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (isValid) "✓ Verified! Ready to claim 5-min session" else "Need ${minChars - reflectionText.trim().length} more characters",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isValid) AccentEmeraldGlow else TextDim
+                    )
+                    Text(
+                        text = "${reflectionText.trim().length} / $minChars",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isValid) AccentEmeraldGlow else TextDim
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Submit Button
-            Button(
-                onClick = {
-                    if (isValid) {
+            // Unlock Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        if (isValid) PrimaryGradient else Brush.linearGradient(listOf(CardInner, CardInner))
+                    )
+                    .clickable(enabled = isValid) {
                         scope.launch {
                             val hourKey = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault()).format(Date())
                             val db = FocusMeApp.instance.database
-                            
-                            // Save reflection
+
                             db.reflectionDao().insert(
                                 ReflectionEntry(
                                     hourKey = hourKey,
@@ -192,36 +250,48 @@ fun ReflectionOverlayScreen(
                                 )
                             )
 
-                            // Mark hour as reflected
                             val existing = db.usageDao().getUsage(hourKey) ?: HourlyUsage(hourKey = hourKey, usedSeconds = 0)
                             db.usageDao().insertOrUpdate(existing.copy(hasReflected = true))
 
                             onUnlocked()
                         }
-                    }
-                },
-                enabled = isValid,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AccentIndigo,
-                    disabledContainerColor = CardInner
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Text("Unlock 5-Minute Session", fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isValid) {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = if (isValid) "Claim 5-Minute Session" else "Enter 15+ Characters to Unlock",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isValid) Color.White else TextDim
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Cancel Button
-            Button(
-                onClick = onCancel,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                modifier = Modifier.fillMaxWidth()
+            // Cancel / Return
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCancel() }
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text("Nevermind, stay in deep flow", color = TextDim, fontSize = 12.sp)
+                Text(
+                    text = "Nevermind, stay focused in deep work",
+                    fontSize = 12.sp,
+                    color = TextDim
+                )
             }
         }
     }

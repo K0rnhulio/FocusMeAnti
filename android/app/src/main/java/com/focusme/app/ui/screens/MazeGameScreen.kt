@@ -9,6 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +21,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,8 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
@@ -48,12 +53,17 @@ import com.focusme.app.core.game.MazeGenerator
 import com.focusme.app.core.game.MazePhysicsEngine
 import com.focusme.app.core.sensors.TiltSensorManager
 import com.focusme.app.ui.theme.AccentCyan
+import com.focusme.app.ui.theme.AccentCyanGlow
 import com.focusme.app.ui.theme.AccentEmerald
 import com.focusme.app.ui.theme.AccentIndigo
 import com.focusme.app.ui.theme.BgDark
 import com.focusme.app.ui.theme.CardDark
+import com.focusme.app.ui.theme.PrimaryGradient
+import com.focusme.app.ui.theme.SuccessGradient
 import com.focusme.app.ui.theme.TextDim
 import com.focusme.app.ui.theme.TextMain
+import com.focusme.app.ui.theme.TextMuted
+import com.focusme.app.ui.theme.glassCard
 import kotlinx.coroutines.delay
 
 @Composable
@@ -68,7 +78,6 @@ fun MazeGameScreen(
     var tiltY by remember { mutableFloatStateOf(0f) }
     var isSolved by remember { mutableStateOf(false) }
 
-    // Tilt Sensor Listener
     DisposableEffect(Unit) {
         val tiltManager = TiltSensorManager(context) { x, y ->
             tiltX = x
@@ -84,7 +93,7 @@ fun MazeGameScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
-            .padding(16.dp),
+            .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -92,26 +101,49 @@ fun MazeGameScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header
-            Text(
-                text = "🐭 Tilt Labyrinth Challenge",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMain
-            )
-            Text(
-                text = "Physically tilt your phone to guide the mouse to the cheese!",
-                fontSize = 13.sp,
-                color = TextDim,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "🐭 Gyroscope Labyrinth",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextMain
+                    )
+                    Text(
+                        text = "Physically tilt phone to guide the ball to golden exit",
+                        fontSize = 11.sp,
+                        color = TextDim
+                    )
+                }
 
-            // Maze Canvas Box
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9999.dp))
+                        .background(AccentCyan.copy(alpha = 0.15f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = if (isSolved) "✓ Solved" else "60 FPS Tilt",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSolved) AccentEmerald else AccentCyan
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Maze Glass Canvas
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(CardDark, RoundedCornerShape(16.dp))
-                    .padding(8.dp)
+                    .glassCard(cornerRadius = 24.dp, elevation = 16.dp)
+                    .padding(10.dp)
             ) {
                 var physicsEngine by remember { mutableStateOf<MazePhysicsEngine?>(null) }
                 var ballPos by remember { mutableStateOf(Offset(0f, 0f)) }
@@ -122,7 +154,7 @@ fun MazeGameScreen(
                             it.update(tiltX, tiltY)
                             ballPos = Offset(it.ball.x, it.ball.y)
                         }
-                        delay(16) // ~60 FPS
+                        delay(16)
                     }
                 }
 
@@ -148,9 +180,9 @@ fun MazeGameScreen(
                         }
                     }
 
-                    // Draw Walls
+                    // Walls
                     val wallColor = Color(0xFF334155)
-                    val strokeWidth = 5f
+                    val strokeWidth = 6f
 
                     for (r in 0 until maze.rows) {
                         for (c in 0 until maze.cols) {
@@ -167,41 +199,65 @@ fun MazeGameScreen(
                         }
                     }
 
-                    // Draw Golden Cheese Goal
+                    // Golden Cheese Goal with glow
                     val goalX = (maze.exitCol + 0.5f) * cellWidth
                     val goalY = (maze.exitRow + 0.5f) * cellHeight
                     drawCircle(
+                        color = Color(0xFFFBBF24).copy(alpha = 0.3f),
+                        radius = cellWidth * 0.42f,
+                        center = Offset(goalX, goalY)
+                    )
+                    drawCircle(
                         color = Color(0xFFFBBF24),
-                        radius = cellWidth * 0.32f,
+                        radius = cellWidth * 0.28f,
                         center = Offset(goalX, goalY)
                     )
 
-                    // Draw Mouse Ball
+                    // Mouse Ball with glow
                     drawCircle(
-                        color = AccentCyan,
+                        color = AccentCyan.copy(alpha = 0.35f),
+                        radius = 26f,
+                        center = ballPos
+                    )
+                    drawCircle(
+                        color = AccentCyanGlow,
                         radius = 18f,
                         center = ballPos
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Completion Banner
             AnimatedVisibility(
                 visible = isSolved,
                 enter = fadeIn() + scaleIn()
             ) {
-                Button(
-                    onClick = onCompleted,
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentEmerald),
-                    shape = RoundedCornerShape(12.dp),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SuccessGradient)
+                        .clickable { onCompleted() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null)
-                    Text(" Challenge Completed • Unlock", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.CheckCircle,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Labyrinth Solved • Claim Break",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }
