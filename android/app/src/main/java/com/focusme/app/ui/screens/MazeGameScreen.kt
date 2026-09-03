@@ -52,18 +52,7 @@ import androidx.compose.ui.unit.sp
 import com.focusme.app.core.game.MazeGenerator
 import com.focusme.app.core.game.MazePhysicsEngine
 import com.focusme.app.core.sensors.TiltSensorManager
-import com.focusme.app.ui.theme.AccentCyan
-import com.focusme.app.ui.theme.AccentCyanGlow
-import com.focusme.app.ui.theme.AccentEmerald
-import com.focusme.app.ui.theme.AccentIndigo
-import com.focusme.app.ui.theme.BgDark
-import com.focusme.app.ui.theme.CardDark
-import com.focusme.app.ui.theme.PrimaryGradient
-import com.focusme.app.ui.theme.SuccessGradient
-import com.focusme.app.ui.theme.TextDim
-import com.focusme.app.ui.theme.TextMain
-import com.focusme.app.ui.theme.TextMuted
-import com.focusme.app.ui.theme.glassCard
+import com.focusme.app.ui.theme.*
 import kotlinx.coroutines.delay
 
 @Composable

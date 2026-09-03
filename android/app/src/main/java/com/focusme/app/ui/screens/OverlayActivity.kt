@@ -46,16 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.focusme.app.ui.theme.AccentCyan
-import com.focusme.app.ui.theme.AccentEmerald
-import com.focusme.app.ui.theme.AccentIndigo
-import com.focusme.app.ui.theme.AccentRose
-import com.focusme.app.ui.theme.BgDark
-import com.focusme.app.ui.theme.CardDark
-import com.focusme.app.ui.theme.FocusMeTheme
-import com.focusme.app.ui.theme.TextDim
-import com.focusme.app.ui.theme.TextMain
-import com.focusme.app.ui.theme.TextMuted
+import com.focusme.app.ui.theme.*
 
 class OverlayActivity : ComponentActivity() {
 
