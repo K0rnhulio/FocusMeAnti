@@ -39,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -90,7 +89,7 @@ fun PushUpCounterScreen(
     var useFrontCamera by remember { mutableStateOf(true) }
     var repCount by remember { mutableIntStateOf(0) }
     var currentAngle by remember { mutableDoubleStateOf(180.0) }
-    var poseDetected by remember { mutableStateOf(false) }
+    var coachingMessage by remember { mutableStateOf("Position phone ~1-2m away facing you") }
     var isDone by remember { mutableStateOf(false) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -144,7 +143,7 @@ fun PushUpCounterScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "FocusMe uses on-device Google ML Kit to count your push-ups using real-time joint kinematics.\n\n🔒 100% Private: Processed entirely on your device. Zero photos or videos are ever saved or uploaded.",
+                    text = "FocusMe uses Google MediaPipe Accurate Pose to track joint kinematics.\n\n🔒 100% Private: All computer vision runs strictly on your device without internet.",
                     fontSize = 13.sp,
                     color = TextMuted,
                     textAlign = TextAlign.Center,
@@ -197,10 +196,10 @@ fun PushUpCounterScreen(
                             val analyzer = PoseAnalyzer(
                                 isPushUpMode = true,
                                 targetReps = targetReps,
-                                onRepProgress = { count, _, angle ->
-                                    poseDetected = true
+                                onRepProgress = { count, _, angle, status ->
                                     repCount = count
                                     currentAngle = angle
+                                    coachingMessage = status
                                 },
                                 onGoalReached = {
                                     isDone = true
@@ -238,9 +237,6 @@ fun PushUpCounterScreen(
 
                     previewView
                 },
-                update = {
-                    // Update preview if camera selector changed
-                },
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -273,10 +269,10 @@ fun PushUpCounterScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (poseDetected) "🟢 Pose Tracking Active" else "🟡 Searching for Body...",
+                            text = "BlazePose Accurate AI",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (poseDetected) AccentEmeraldGlow else AccentAmber
+                            color = AccentCyan
                         )
                     }
 
@@ -318,10 +314,18 @@ fun PushUpCounterScreen(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Elbow Angle: ${currentAngle.toInt()}° (Bend < 90° for rep)",
+                            text = "Elbow Angle: ${currentAngle.toInt()}° (Target < 85°)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextDim
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = coachingMessage,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (coachingMessage.contains("✓") || coachingMessage.contains("Good")) AccentEmeraldGlow else AccentCyanGlow,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -347,7 +351,7 @@ fun PushUpCounterScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "5 Reps Verified • Claim Break",
+                                text = "5 Clean Push-Ups Verified • Claim Break",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = Color.White
@@ -362,7 +366,7 @@ fun PushUpCounterScreen(
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "Place phone on floor ~1 meter away facing you",
+                            text = "Floor plank required • Random arm waves are rejected",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextMuted

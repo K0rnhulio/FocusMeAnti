@@ -73,8 +73,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    // Google ML Kit Pose Detection
-    implementation(libs.google.mlkit.pose)
+    // Google ML Kit Pose Detection (Accurate BlazePose Model)
+    implementation(libs.google.mlkit.pose.accurate)
 
     // Room Database
     implementation(libs.androidx.room.runtime)
