@@ -403,8 +403,8 @@ fun PushUpCounterScreen(
 
                 // 3. Popped Burst Particle Effect
                 if (burstTarget != null) {
-                    val burstX = screenWidth * burstTarget!!.xRatio
-                    val burstY = screenHeight * burstTarget!!.yRatio
+                    val burstX = screenWidth * burstTarget!!.x
+                    val burstY = screenHeight * burstTarget!!.y
                     Box(
                         modifier = Modifier
                             .offset(x = burstX - 50.dp, y = burstY - 50.dp)
