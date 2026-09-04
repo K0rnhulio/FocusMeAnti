@@ -3,6 +3,7 @@ package com.focusme.app.ui.screens
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.PointF
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -14,44 +15,26 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,16 +49,38 @@ import androidx.core.content.ContextCompat
 import com.focusme.app.FocusMeApp
 import com.focusme.app.core.vision.PoseAnalyzer
 import com.focusme.app.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.hypot
+
+data class PopOrb(
+    val id: Int,
+    val xRatio: Float,
+    val yRatio: Float,
+    val label: String
+)
+
+val orbList = listOf(
+    PopOrb(1, 0.25f, 0.14f, "Stretch Left Hand Up! ↖"),
+    PopOrb(2, 0.75f, 0.14f, "Stretch Right Hand Up! ↗"),
+    PopOrb(3, 0.50f, 0.08f, "Reach Straight to Ceiling! ⬆"),
+    PopOrb(4, 0.20f, 0.18f, "Reach Left Overhead! ↖"),
+    PopOrb(5, 0.80f, 0.18f, "Reach Right Overhead! ↗"),
+    PopOrb(6, 0.35f, 0.10f, "High Stretch Left! ⬆"),
+    PopOrb(7, 0.65f, 0.10f, "High Stretch Right! ⬆"),
+    PopOrb(8, 0.18f, 0.12f, "Full Reach Top-Left! ↖"),
+    PopOrb(9, 0.82f, 0.12f, "Full Reach Top-Right! ↗"),
+    PopOrb(10, 0.50f, 0.07f, "Final Grand Stretch to Top! 🌟")
+)
 
 @Composable
 fun PushUpCounterScreen(
-    targetReps: Int = 5,
+    targetReps: Int = 10,
     onCompleted: () -> Unit
 ) {
     val context = LocalContext.current
@@ -99,12 +104,11 @@ fun PushUpCounterScreen(
     }
 
     var useFrontCamera by remember { mutableStateOf(true) }
-    var repCount by remember { mutableIntStateOf(0) }
-    var reachProgress by remember { mutableFloatStateOf(0f) }
-    var isTargetReached by remember { mutableStateOf(false) }
-    var targetLineRatio by remember { mutableFloatStateOf(0.25f) }
-    var coachingMessage by remember { mutableStateOf("Position phone ~0.5-1.5m away facing you") }
+    var isHeadAligned by remember { mutableStateOf(false) }
+    var handPoints by remember { mutableStateOf<List<PointF>>(emptyList()) }
+    var poppedCount by remember { mutableIntStateOf(0) }
     var isDone by remember { mutableStateOf(false) }
+    var burstTarget by remember { mutableStateOf<PointF?>(null) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
 
@@ -114,11 +118,23 @@ fun PushUpCounterScreen(
         }
     }
 
-    LaunchedEffect(isTargetReached) {
-        if (isTargetReached) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
-            }
+    // Floating orb pulse animation
+    val infiniteTransition = rememberInfiniteTransition(label = "orb_pulse")
+    val orbScale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(650, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "orb_scale"
+    )
+
+    // Clear burst effect after 350ms
+    LaunchedEffect(burstTarget) {
+        if (burstTarget != null) {
+            delay(350)
+            burstTarget = null
         }
     }
 
@@ -165,7 +181,7 @@ fun PushUpCounterScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Prop phone upright on your desk facing your torso.\n\nPerform 5 Overhead Air Presses (Military Press without weights) by pressing both hands straight above your head.\n\n🔒 100% Private: All computer vision runs strictly on your device without internet.",
+                    text = "Prop phone upright on your desk facing you.\n\nAnchor your head in the center guide and stretch your hands overhead to touch and pop 10 floating energy orbs.\n\n🔒 100% Private: Pose and motion detection runs strictly on your device without internet.",
                     fontSize = 13.sp,
                     color = TextMuted,
                     textAlign = TextAlign.Center,
@@ -196,6 +212,7 @@ fun PushUpCounterScreen(
             }
         } else {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val screenWidth = maxWidth
                 val screenHeight = maxHeight
 
                 // Camera Live View + ML Kit Pose Detection
@@ -219,19 +236,44 @@ fun PushUpCounterScreen(
                                     .build()
 
                                 val analyzer = PoseAnalyzer(
-                                    isPushUpMode = true,
-                                    targetReps = targetReps,
-                                    onRepProgress = { count, _, progress, status, reached, lineRatio ->
-                                        repCount = count
-                                        reachProgress = progress
-                                        coachingMessage = status
-                                        isTargetReached = reached
-                                        targetLineRatio = lineRatio
-                                    },
-                                    onGoalReached = {
-                                        isDone = true
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                            vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+                                    isFrontCamera = useFrontCamera,
+                                    onFrameUpdate = { isAligned, hands, _ ->
+                                        isHeadAligned = isAligned
+                                        handPoints = hands
+
+                                        // Collision Detection with Current Active Orb
+                                        if (!isDone && poppedCount < orbList.size) {
+                                            val target = orbList[poppedCount]
+                                            var isHit = false
+
+                                            for (pt in hands) {
+                                                val dx = pt.x - target.xRatio
+                                                val dy = (pt.y - target.yRatio) * 1.5f
+                                                val dist = hypot(dx, dy)
+                                                val isOverheadSweep = pt.y <= (target.yRatio + 0.04f) && abs(pt.x - target.xRatio) < 0.14f
+
+                                                if (dist < 0.12f || isOverheadSweep) {
+                                                    isHit = true
+                                                    break
+                                                }
+                                            }
+
+                                            if (isHit) {
+                                                val poppedIndex = poppedCount
+                                                poppedCount++
+                                                burstTarget = PointF(target.xRatio, target.yRatio)
+
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                    vibrator.vibrate(VibrationEffect.createOneShot(70, VibrationEffect.DEFAULT_AMPLITUDE))
+                                                }
+
+                                                if (poppedIndex + 1 >= orbList.size) {
+                                                    isDone = true
+                                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                                        vibrator.vibrate(VibrationEffect.createOneShot(350, VibrationEffect.DEFAULT_AMPLITUDE))
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 )
@@ -267,79 +309,133 @@ fun PushUpCounterScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Dynamic Overhead Target Line (adapts dynamically to user's head & scale)
-                val lineOffsetY = screenHeight * targetLineRatio
+                // 1. Center Head Anchor Guide Oval (Aligns Head / Torso)
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = lineOffsetY)
-                        .padding(horizontal = 16.dp)
+                        .align(Alignment.Center)
+                        .offset(y = 20.dp)
+                        .size(width = 175.dp, height = 230.dp)
+                        .clip(RoundedCornerShape(90.dp))
+                        .background(if (isHeadAligned) Color(0x2210B981) else Color(0x1538BDF8))
+                        .border(
+                            width = if (isHeadAligned) 3.dp else 2.dp,
+                            color = if (isHeadAligned) Color(0xFF10B981) else Color(0x6638BDF8),
+                            shape = RoundedCornerShape(90.dp)
+                        ),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
-                    // Glowing horizontal line
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(if (isTargetReached) 4.dp else 2.5.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(
-                                if (isTargetReached)
-                                    Brush.horizontalGradient(
-                                        listOf(Color(0xFF10B981), Color(0xFF34D399), Color(0xFF10B981))
-                                    )
-                                else
-                                    Brush.horizontalGradient(
-                                        listOf(Color(0x2238BDF8), Color(0xFF38BDF8), Color(0x2238BDF8))
-                                    )
-                            )
-                    )
-
-                    // Target Line Center Pill Badge
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .offset(y = (-14).dp)
+                            .offset(y = 12.dp)
                             .clip(RoundedCornerShape(9999.dp))
-                            .background(if (isTargetReached) Color(0xE6065F46) else Color(0xD90F172A))
+                            .background(if (isHeadAligned) Color(0xE6065F46) else Color(0xD90F172A))
                             .border(
                                 1.dp,
-                                if (isTargetReached) Color(0xFF34D399) else Color(0x8838BDF8),
+                                if (isHeadAligned) Color(0xFF34D399) else Color(0x6638BDF8),
                                 RoundedCornerShape(9999.dp)
                             )
                             .padding(horizontal = 12.dp, vertical = 4.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowUpward,
-                                contentDescription = null,
-                                tint = if (isTargetReached) Color(0xFF34D399) else AccentCyan,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isHeadAligned) "✓ Head In Position" else "Align Head In Guide",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isHeadAligned) Color(0xFF34D399) else AccentCyan,
+                            letterSpacing = 0.4.sp
+                        )
+                    }
+                }
+
+                // 2. Active Popping Orb (Top 5% - 25% Zone)
+                if (!isDone && poppedCount < orbList.size) {
+                    val activeOrb = orbList[poppedCount]
+                    val orbX = screenWidth * activeOrb.xRatio
+                    val orbY = screenHeight * activeOrb.yRatio
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = orbX - 35.dp, y = orbY - 35.dp)
+                            .size(70.dp)
+                            .scale(orbScale),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Outer Pulsing Glow
+                        Box(
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(
+                                            (if (activeOrb.id == 10) Color(0xFFF59E0B) else AccentCyan).copy(alpha = 0.5f),
+                                            Color.Transparent
+                                        )
+                                    )
+                                )
+                        )
+
+                        // Core Orb
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .shadow(14.dp, CircleShape, spotColor = if (activeOrb.id == 10) Color(0xFFF59E0B) else AccentCyan)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        if (activeOrb.id == 10)
+                                            listOf(Color(0xFFFBBF24), Color(0xFFEA580C))
+                                        else
+                                            listOf(Color(0xFF38BDF8), Color(0xFF2563EB))
+                                    )
+                                )
+                                .border(2.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = if (isTargetReached) "✓ TARGET REACHED!" else "OVERHEAD TARGET LINE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isTargetReached) Color(0xFF34D399) else AccentCyan,
-                                letterSpacing = 0.5.sp
+                                text = "${activeOrb.id}",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.White
                             )
                         }
                     }
                 }
 
-                // Instant screen edge green glow when target lockout is reached
-                if (isTargetReached) {
+                // 3. Popped Burst Particle Effect
+                if (burstTarget != null) {
+                    val burstX = screenWidth * burstTarget!!.xRatio
+                    val burstY = screenHeight * burstTarget!!.yRatio
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .border(5.dp, Color(0xCC10B981))
+                            .offset(x = burstX - 50.dp, y = burstY - 50.dp)
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x6610B981))
+                            .border(3.dp, Color(0xFF34D399), CircleShape)
                     )
                 }
 
-                // Modern Transparent HUD Overlay
+                // 4. Real-Time Hand Trackers (Fingertip Halos)
+                for (hand in handPoints) {
+                    val handX = screenWidth * hand.x
+                    val handY = screenHeight * hand.y
+                    Box(
+                        modifier = Modifier
+                            .offset(x = handX - 10.dp, y = handY - 10.dp)
+                            .size(20.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x8838BDF8))
+                            .border(1.5.dp, Color.White, CircleShape)
+                    )
+                }
+
+                // 5. Modern Transparent HUD Overlay
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp),
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Top Bar
@@ -357,14 +453,14 @@ fun PushUpCounterScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FitnessCenter,
+                                imageVector = Icons.Default.TouchApp,
                                 contentDescription = null,
                                 tint = AccentCyan,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Overhead Air Press",
+                                text = "Overhead Reach & Pop",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AccentCyan
@@ -392,7 +488,7 @@ fun PushUpCounterScreen(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Bottom Floating Rep Counter HUD
+                    // Bottom Floating Score & Guidance HUD
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -402,75 +498,55 @@ fun PushUpCounterScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "$repCount / $targetReps",
-                                fontSize = 48.sp,
+                                text = "$poppedCount / ${orbList.size} Orbs Popped",
+                                fontSize = 34.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (isDone || isTargetReached) AccentEmeraldGlow else TextMain,
-                                letterSpacing = 1.sp
+                                color = if (isDone) AccentEmeraldGlow else TextMain,
+                                letterSpacing = 0.5.sp
                             )
-
-                            // Reach Extension Bar
-                            val reachPct = (reachProgress * 100).toInt()
-                            Row(
-                                modifier = Modifier.fillMaxWidth(0.8f),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Overhead Reach: $reachPct%",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isTargetReached || reachPct >= 90) AccentEmeraldGlow else TextDim
-                                )
-                                Text(
-                                    text = if (isTargetReached) "✓ Lockout" else "Press Up",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isTargetReached) AccentEmeraldGlow else AccentCyan
-                                )
-                            }
 
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            // Glowing Progress Track
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.8f)
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(Color(0x33475569))
+                            // 10-Step Progress Track
+                            Row(
+                                modifier = Modifier.fillMaxWidth(0.85f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(reachProgress)
-                                        .height(6.dp)
-                                        .clip(RoundedCornerShape(3.dp))
-                                        .background(
-                                            if (isTargetReached)
-                                                Brush.horizontalGradient(
-                                                    listOf(Color(0xFF10B981), Color(0xFF34D399))
-                                                )
-                                            else
-                                                Brush.horizontalGradient(
-                                                    listOf(Color(0xFF0284C7), Color(0xFF38BDF8))
-                                                )
-                                        )
-                                )
+                                for (i in 0 until orbList.size) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(
+                                                if (i < poppedCount) AccentEmeraldGlow
+                                                else Color(0x33475569)
+                                            )
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(10.dp))
 
+                            val currentPrompt = if (isDone) {
+                                "✓ All 10 Orbs Popped! Excellent stretch!"
+                            } else if (!isHeadAligned) {
+                                "Anchor head in the center guide to target orbs"
+                            } else {
+                                orbList[poppedCount].label
+                            }
+
                             Text(
-                                text = coachingMessage,
+                                text = currentPrompt,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (coachingMessage.contains("✓") || coachingMessage.contains("Good") || coachingMessage.contains("Lockout") || isTargetReached) AccentEmeraldGlow else AccentCyanGlow,
+                                color = if (isDone || isHeadAligned) AccentEmeraldGlow else Color(0xFFFBBF24),
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     if (isDone) {
                         Box(
@@ -497,7 +573,7 @@ fun PushUpCounterScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "5 Overhead Presses Verified • Claim Break",
+                                    text = "10 Orbs Popped • Claim 5-Min Break ➔",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = Color.White
@@ -512,7 +588,7 @@ fun PushUpCounterScreen(
                                 .padding(horizontal = 14.dp, vertical = 7.dp)
                         ) {
                             Text(
-                                text = "Prop phone upright on desk • Press both hands above target line",
+                                text = "Keep head in guide • Reach hands overhead to pop orbs",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = TextMuted

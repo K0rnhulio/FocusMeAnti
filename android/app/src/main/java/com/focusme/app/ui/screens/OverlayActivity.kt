@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -518,11 +519,11 @@ fun UnifiedLockOverlayScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Challenge 3: Air Press
+                // Challenge 3: AR Overhead Reach & Pop
                 TollGateRowCard(
-                    title = "3. AI Overhead Air Press (5 Reps)",
-                    subtitle = "Put phone in front • Raise arms overhead",
-                    icon = Icons.Default.FitnessCenter,
+                    title = "3. AR Overhead Reach & Pop (10 Orbs)",
+                    subtitle = "Anchor head & stretch overhead to pop 10 floating orbs",
+                    icon = Icons.Default.TouchApp,
                     isCompleted = isPushUpSolved,
                     onClick = { if (!isNightLocked && !isQuotaExhausted) onLaunchPushUp() }
                 )
