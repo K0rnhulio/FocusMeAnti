@@ -47,6 +47,10 @@ class FocusAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "FocusAccessibility"
 
+        @Volatile
+        var isRunning: Boolean = false
+            internal set
+
         val BROWSER_PACKAGES = setOf(
             "com.android.chrome",
             "com.sec.android.app.sbrowser",
@@ -64,44 +68,74 @@ class FocusAccessibilityService : AccessibilityService() {
             "facebook.com",
             "instagram.com",
             "tiktok.com",
-            "youtube.com"
+            "youtube.com",
+            "linkedin.com"
         )
 
         fun isEnabled(context: Context): Boolean {
-            val expectedComponentName = ComponentName(context, FocusAccessibilityService::class.java)
-            val enabledServicesSetting = Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            ) ?: return false
-            val colonSplitter = TextUtils.SimpleStringSplitter(':')
-            colonSplitter.setString(enabledServicesSetting)
-            while (colonSplitter.hasNext()) {
-                val componentNameString = colonSplitter.next()
-                val enabledComponent = ComponentName.unflattenFromString(componentNameString)
-                if (enabledComponent != null && enabledComponent == expectedComponentName) {
-                    return true
+            if (isRunning) return true
+
+            // 1. Direct AccessibilityManager check
+            try {
+                val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
+                val enabledServices = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                if (enabledServices != null) {
+                    for (service in enabledServices) {
+                        if (service.resolveInfo?.serviceInfo?.packageName == context.packageName) {
+                            return true
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking AccessibilityManager: ${e.message}")
             }
-            return false
+
+            // 2. Settings.Secure check
+            try {
+                val enabledServicesSetting = Settings.Secure.getString(
+                    context.contentResolver,
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                ) ?: return false
+
+                val expectedComponentName = ComponentName(context, FocusAccessibilityService::class.java)
+                val full = expectedComponentName.flattenToString()
+                val short = expectedComponentName.flattenToShortString()
+                val pkg = context.packageName
+
+                return enabledServicesSetting.contains(full) ||
+                       enabledServicesSetting.contains(short) ||
+                       enabledServicesSetting.contains(pkg)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking Settings.Secure: ${e.message}")
+                return false
+            }
         }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
-                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 20
-        }
+        isRunning = true
+        val info = serviceInfo ?: AccessibilityServiceInfo()
+        info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+        info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        info.notificationTimeout = 20
         serviceInfo = info
 
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(applicationContext, "🛡️ FocusMe Protection Active!", Toast.LENGTH_SHORT).show()
         }
-        Log.d(TAG, "FocusAccessibilityService connected with ALL_MASK flags")
+        Log.d(TAG, "FocusAccessibilityService connected, isRunning = true")
+    }
+
+    override fun onUnbind(intent: Intent?): Boolean {
+        isRunning = false
+        stopHeartbeat()
+        Log.d(TAG, "FocusAccessibilityService unbind, isRunning = false")
+        return super.onUnbind(intent)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -128,15 +162,26 @@ class FocusAccessibilityService : AccessibilityService() {
             return // Do NOT fall through to standalone app evaluation!
         }
 
-        // 4. Standalone Target Apps Evaluation (Reddit, Twitter/X, FB, IG, TikTok, YouTube)
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // 4. Standalone Target Apps Evaluation (Reddit, Twitter/X, FB, IG, TikTok, YouTube, LinkedIn)
+        val lowerPkg = packageName.toLowerCase(Locale.getDefault())
+        val isTargetApp = lowerPkg.contains("reddit") ||
+                lowerPkg.contains("twitter") ||
+                lowerPkg.contains("katana") ||
+                lowerPkg.contains("facebook") ||
+                lowerPkg.contains("instagram") ||
+                lowerPkg.contains("tiktok") ||
+                lowerPkg.contains("musically") ||
+                lowerPkg.contains("youtube") ||
+                lowerPkg.contains("snapchat") ||
+                lowerPkg.contains("linkedin") ||
+                lowerPkg.contains("webapk")
+
+        if (isTargetApp) {
             currentForegroundPackage = packageName
             evaluateAppDiscipline(packageName)
-        } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            if (currentForegroundPackage != packageName) {
-                currentForegroundPackage = packageName
-                evaluateAppDiscipline(packageName)
-            }
+        } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            currentForegroundPackage = packageName
+            evaluateAppDiscipline(packageName)
         }
     }
 
@@ -153,41 +198,34 @@ class FocusAccessibilityService : AccessibilityService() {
             val isEnabled = FocusMeApp.instance.preferences.zaloVideoBlock.first()
             if (!isEnabled) return@launch
 
-            // Always allow active chat conversations (text input present)
+            // Immediate Trigger A: Check event class or text for video feeds
+            if (isZaloVideoFeedActive(rootNode, event)) {
+                if (now - lastZaloRedirectTimestamp > 350) {
+                    lastZaloRedirectTimestamp = now
+                    redirectToZaloChats(rootNode)
+                }
+                return@launch
+            }
+
+            // Exemption: Inside an active chat room or composing message
             if (rootNode != null && isInsideChatRoom(rootNode)) {
                 return@launch
             }
 
-            val eventType = event.eventType
-
-            // Trigger A: User clicked on Video tab, Timeline, Discover, or a Video/Reel element
-            if (eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            // Trigger B: User tapped on Timeline ("Nhật ký"), Discover ("Khám phá"), or Video
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val clickedText = event.text?.joinToString(" ") ?: ""
                 val clickedDesc = event.contentDescription?.toString() ?: ""
                 val combined = "$clickedText $clickedDesc".toLowerCase(Locale.getDefault())
 
-                if (combined.contains("nhật ký") || combined.contains("khám phá") || 
-                    combined.contains("timeline") || combined.contains("khoảnh khắc") || 
-                    combined.contains("video") || combined.contains("shorts") || 
-                    combined.contains("reels")) {
-                    
-                    if (now - lastZaloRedirectTimestamp > 250) {
+                val blockedWords = listOf("nhật ký", "khám phá", "timeline", "khoảnh khắc", "video")
+                if (blockedWords.any { combined.contains(it) }) {
+                    if (now - lastZaloRedirectTimestamp > 350) {
                         lastZaloRedirectTimestamp = now
                         redirectToZaloChats(rootNode)
                     }
                     return@launch
                 }
-            }
-
-            // Trigger B: User is actively in a Video feed / Video player activity (or scrolling videos)
-            val isVideoFeed = isZaloVideoFeedActive(rootNode, event)
-            if (isVideoFeed) {
-                if (now - lastZaloRedirectTimestamp > 250) {
-                    lastZaloRedirectTimestamp = now
-                    performGlobalAction(GLOBAL_ACTION_BACK)
-                    redirectToZaloChats(rootNode)
-                }
-                return@launch
             }
 
             // Trigger C: Feed / Video tab is selected in bottom bar
@@ -347,27 +385,48 @@ class FocusAccessibilityService : AccessibilityService() {
      * Scans for blocked domains (Reddit, Twitter, etc.) inside Chrome, Samsung Internet, Firefox...
      */
     private fun handleBrowserUrlCheck(rootNode: AccessibilityNodeInfo?, browserPkg: String) {
-        if (rootNode == null) return
-
-        val urlBarIds = listOf(
-            "$browserPkg:id/url_bar",
-            "$browserPkg:id/location_bar_edit_text",
-            "$browserPkg:id/search_box",
-            "$browserPkg:id/toolbar",
-            "$browserPkg:id/url_bar_title"
-        )
-
+        val now = System.currentTimeMillis()
         var detectedUrl: String? = null
-        for (id in urlBarIds) {
-            val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
-            if (nodes.isNotEmpty() && nodes[0].text != null) {
-                detectedUrl = nodes[0].text.toString().toLowerCase(Locale.getDefault())
-                break
+
+        // 1. Scan known URL bar view IDs
+        if (rootNode != null) {
+            val urlBarIds = listOf(
+                "$browserPkg:id/url_bar",
+                "$browserPkg:id/location_bar_edit_text",
+                "$browserPkg:id/search_box",
+                "$browserPkg:id/toolbar",
+                "$browserPkg:id/url_bar_title"
+            )
+            for (id in urlBarIds) {
+                val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
+                if (nodes.isNotEmpty() && nodes[0].text != null) {
+                    detectedUrl = nodes[0].text.toString().toLowerCase(Locale.getDefault())
+                    break
+                }
             }
         }
 
-        // Fallback: search for domain text if URL bar is collapsed
+        // 2. Scan window titles for site names / domains
         if (detectedUrl == null) {
+            try {
+                for (w in windows) {
+                    val title = w.title?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
+                    for (domain in BLOCKED_DOMAINS) {
+                        val base = domain.substringBefore(".")
+                        if (title.contains(domain) || (base.length > 3 && title.contains(base))) {
+                            detectedUrl = domain
+                            break
+                        }
+                    }
+                    if (detectedUrl != null) break
+                }
+            } catch (e: Exception) {
+                // Fallback
+            }
+        }
+
+        // 3. Fallback: search for domain text in active window
+        if (detectedUrl == null && rootNode != null) {
             for (domain in BLOCKED_DOMAINS) {
                 val nodes = rootNode.findAccessibilityNodeInfosByText(domain)
                 if (nodes.isNotEmpty()) {
@@ -380,25 +439,21 @@ class FocusAccessibilityService : AccessibilityService() {
         var matchedDomain: String? = null
         if (detectedUrl != null) {
             for (domain in BLOCKED_DOMAINS) {
-                if (detectedUrl.contains(domain)) {
+                val base = domain.substringBefore(".")
+                if (detectedUrl.contains(domain) || (base.length > 3 && detectedUrl.contains(base))) {
                     matchedDomain = domain
                     break
                 }
             }
         }
 
-        val now = System.currentTimeMillis()
-
         if (matchedDomain != null) {
             lastBlockedDomainSeenTimestamp = now
             val webTarget = "web:$matchedDomain"
-            if (currentForegroundPackage != webTarget) {
-                currentForegroundPackage = webTarget
-                evaluateAppDiscipline(webTarget)
-            }
+            currentForegroundPackage = webTarget
+            evaluateAppDiscipline(webTarget)
         } else {
             // User is in browser, but on an allowed page (e.g. google.com, stackoverflow)
-            // Apply a 2.5s grace period to prevent flickering when URL bar momentarily hides during scroll
             if (currentForegroundPackage.startsWith("web:")) {
                 if (now - lastBlockedDomainSeenTimestamp > 2500) {
                     currentForegroundPackage = browserPkg
@@ -413,7 +468,7 @@ class FocusAccessibilityService : AccessibilityService() {
         if (pkg == applicationContext.packageName) return // Never block our own app
 
         val now = System.currentTimeMillis()
-        if (now - lastBlockedTimestamp < 600) return // Debounce
+        if (now - lastBlockedTimestamp < 500) return // Debounce
 
         serviceScope.launch {
             val prefs = FocusMeApp.instance.preferences
@@ -430,7 +485,11 @@ class FocusAccessibilityService : AccessibilityService() {
                             lowerPkg.contains("musically") || 
                             lowerPkg.contains("youtube") || 
                             lowerPkg.contains("snapchat") || 
+                            lowerPkg.contains("linkedin") || 
+                            lowerPkg.contains("webapk") || 
                             lowerPkg.startsWith("web:")
+
+            Log.d(TAG, "evaluateAppDiscipline: pkg=$pkg, isBlocked=$isBlocked")
 
             if (!isBlocked) {
                 stopHeartbeat()
@@ -445,7 +504,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
             // 1. Outside 10:00 AM - 9:00 PM: 100% Lockout
             if (currentHour < startHour || currentHour >= endHour) {
-                lastBlockedTimestamp = now
+                Log.d(TAG, "Blocked: outside schedule")
                 stopHeartbeat()
                 OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("outside_schedule", pkg)
@@ -459,7 +518,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
             // 2. Hourly Quota Exhausted: 100% Lockout
             if (usage.usedSeconds >= quota) {
-                lastBlockedTimestamp = now
+                Log.d(TAG, "Blocked: quota exhausted")
                 stopHeartbeat()
                 OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("quota_exhausted", pkg)
@@ -473,7 +532,7 @@ class FocusAccessibilityService : AccessibilityService() {
             val allGatesCleared = (mazeHour == hourKey && shakeHour == hourKey && pushUpHour == hourKey)
 
             if (!allGatesCleared) {
-                lastBlockedTimestamp = now
+                Log.d(TAG, "Blocked: gauntlet required")
                 stopHeartbeat()
                 OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("gauntlet_required", pkg)
@@ -482,7 +541,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
             // 4. 30-Min Mindful Reflection Required
             if (!usage.hasReflected) {
-                lastBlockedTimestamp = now
+                Log.d(TAG, "Blocked: reflection required")
                 stopHeartbeat()
                 OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("reflection_required", pkg)
@@ -490,6 +549,7 @@ class FocusAccessibilityService : AccessibilityService() {
             }
 
             // 5. Start wall-clock dwell timer & floating pill
+            Log.d(TAG, "Session allowed: starting heartbeat")
             startHeartbeat(pkg, hourKey, quota)
         }
     }
@@ -547,6 +607,20 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     private fun launchLockOverlay(reason: String, targetPkg: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastBlockedTimestamp < 600) return
+        lastBlockedTimestamp = now
+
+        Log.e(TAG, "🛡️ LAUNCHING LOCK OVERLAY for $targetPkg (reason: $reason)")
+
+        // 1. Instantly exit the blocked app to Home Screen
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed performGlobalAction HOME: ${e.message}")
+        }
+
+        // 2. Launch full-screen lock overlay
         val intent = Intent(this, OverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or 
@@ -563,6 +637,7 @@ class FocusAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         stopHeartbeat()
     }
 }
