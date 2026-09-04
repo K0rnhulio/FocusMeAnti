@@ -13,26 +13,35 @@ import kotlin.math.abs
 import kotlin.math.atan2
 
 /**
- * Biomechanical Pose Analyzer for Overhead Air Press / Military Press & Squats.
+ * Biomechanical Pose Analyzer for Overhead Air Press (Military Press) & Squats.
  *
- * Designed for desk/tabletop phone placement:
- * 1. Tracks head, shoulders, elbows, and wrists with phone propped in front of user.
- * 2. Bottom Phase: Hands at shoulder height, elbows bent.
- * 3. Top Phase: Hands pressed fully straight overhead above head level.
- * 4. Temporal constraints and EMA smoothing ensure no accidental false counts.
+ * Overhead Air Press Biomechanics:
+ * 1. Normalized Anatomical Scale: scale = abs(shoulderY - noseY) adapts dynamically to phone distance.
+ * 2. Hand & Fingertip Tracking: Uses WRIST, INDEX, and PINKY landmarks for highest reach point.
+ * 3. Overhead Target Zone: Hands must cross 20%-40% above head top (handY < headTop - 0.3 * scale).
+ * 4. Ceiling Hit Detection: If close to phone and hands touch top edge (<= 7% frame height), counts as top reach.
+ * 5. Elbow Elevation Check: Elbows must rise above shoulders (elbowY < shoulderY) for valid press lockout.
+ * 6. Bottom Rack Zone: Hands return down to shoulder level (handY >= shoulderY - 0.15 * scale).
  */
 class PoseAnalyzer(
     private val isPushUpMode: Boolean = true, // true = Overhead Air Press mode
     private val targetReps: Int = 5,
-    private val onRepProgress: (current: Int, target: Int, angle: Double, statusMessage: String) -> Unit,
+    private val onRepProgress: (
+        current: Int,
+        target: Int,
+        progressPercent: Float,
+        statusMessage: String,
+        isTargetReached: Boolean,
+        targetLineYRatio: Float
+    ) -> Unit,
     private val onGoalReached: () -> Unit
 ) : ImageAnalysis.Analyzer {
 
     companion object {
         private const val TAG = "PoseAnalyzer"
-        private const val MIN_CONFIDENCE = 0.60f
-        private const val MIN_REP_DURATION_MS = 600L
-        private const val MIN_TOP_HOLD_MS = 150L
+        private const val MIN_CONFIDENCE = 0.35f
+        private const val MIN_REP_DURATION_MS = 500L
+        private const val MIN_TOP_HOLD_MS = 120L
     }
 
     private val options = AccuratePoseDetectorOptions.Builder()
@@ -42,8 +51,8 @@ class PoseAnalyzer(
     private val detector = PoseDetection.getClient(options)
 
     private var repCount = 0
-    private var smoothedAngle = 90.0
-    private var isFirstAngle = true
+    private var smoothedProgress = 0f
+    private var isFirstProgress = true
 
     // State Machine for Overhead Air Press
     private enum class PressState {
@@ -62,11 +71,15 @@ class PoseAnalyzer(
     override fun analyze(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
-            val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            val isRotated = rotationDegrees == 90 || rotationDegrees == 270
+            val frameHeight = if (isRotated) imageProxy.width else imageProxy.height
+
+            val inputImage = InputImage.fromMediaImage(mediaImage, rotationDegrees)
 
             detector.process(inputImage)
                 .addOnSuccessListener { pose ->
-                    processPose(pose)
+                    processPose(pose, frameHeight.toFloat())
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "ML Kit Pose detection error: ${e.message}")
@@ -79,15 +92,15 @@ class PoseAnalyzer(
         }
     }
 
-    private fun processPose(pose: Pose) {
+    private fun processPose(pose: Pose, frameHeight: Float) {
         val landmarks = pose.allPoseLandmarks
         if (landmarks.isEmpty()) {
-            onRepProgress(repCount, targetReps, 90.0, "Place phone on desk facing your torso")
+            onRepProgress(repCount, targetReps, 0f, "Place phone facing you • Torso in frame", false, 0.25f)
             return
         }
 
         if (isPushUpMode) {
-            analyzeOverheadAirPress(pose)
+            analyzeOverheadAirPress(pose, frameHeight)
         } else {
             analyzeSquat(pose)
         }
@@ -95,71 +108,127 @@ class PoseAnalyzer(
 
     /**
      * Overhead Air Press (Military Press) Analysis:
-     * User sits or stands in front of phone placed on desk/table.
-     * - Hands start at shoulder height (elbows bent).
-     * - Press straight overhead above head level with arms extended.
-     * - Return hands to shoulder height to complete 1 rep.
+     * - Normalized Anatomical Proportions
+     * - Hands & Fingertips (Wrist, Index, Pinky)
+     * - Ceiling Hit Detection & Elbow Elevation Check
      */
-    private fun analyzeOverheadAirPress(pose: Pose) {
-        // Head / Nose reference landmark
+    private fun analyzeOverheadAirPress(pose: Pose, frameHeight: Float) {
         val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+        val lEye = pose.getPoseLandmark(PoseLandmark.LEFT_EYE)
+        val rEye = pose.getPoseLandmark(PoseLandmark.RIGHT_EYE)
 
-        // Evaluate Left Arm Quality
         val lShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        val lElbow = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW)
-        val lWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
-        val leftArmConfidence = if (lShoulder != null && lElbow != null && lWrist != null) {
-            (lShoulder.inFrameLikelihood + lElbow.inFrameLikelihood + lWrist.inFrameLikelihood) / 3f
-        } else 0f
-
-        // Evaluate Right Arm Quality
         val rShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
-        val rElbow = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW)
-        val rWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
-        val rightArmConfidence = if (rShoulder != null && rElbow != null && rWrist != null) {
-            (rShoulder.inFrameLikelihood + rElbow.inFrameLikelihood + rWrist.inFrameLikelihood) / 3f
-        } else 0f
 
-        // Select Best Visible Arm
-        val (shoulder, elbow, wrist) = when {
-            leftArmConfidence >= rightArmConfidence && leftArmConfidence >= MIN_CONFIDENCE -> {
-                Triple(lShoulder!!, lElbow!!, lWrist!!)
-            }
-            rightArmConfidence > leftArmConfidence && rightArmConfidence >= MIN_CONFIDENCE -> {
-                Triple(rShoulder!!, rElbow!!, rWrist!!)
-            }
-            else -> {
-                onRepProgress(repCount, targetReps, 90.0, "Torso obscured • Ensure shoulders & arms in frame")
-                return
-            }
+        val lElbow = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW)
+        val rElbow = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW)
+
+        val lWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
+        val rWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+
+        val lIndex = pose.getPoseLandmark(PoseLandmark.LEFT_INDEX)
+        val rIndex = pose.getPoseLandmark(PoseLandmark.RIGHT_INDEX)
+
+        val lPinky = pose.getPoseLandmark(PoseLandmark.LEFT_PINKY)
+        val rPinky = pose.getPoseLandmark(PoseLandmark.RIGHT_PINKY)
+
+        // 1. Calculate Shoulder Center & Check Confidence
+        val shoulderYs = listOfNotNull(
+            lShoulder?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y,
+            rShoulder?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+        )
+
+        if (shoulderYs.isEmpty()) {
+            onRepProgress(repCount, targetReps, smoothedProgress, "Position shoulders and chest in frame", false, 0.25f)
+            return
         }
 
-        // Calculate Joint Angle (Shoulder -> Elbow -> Wrist)
-        val rawAngle = calculateAngle(shoulder, elbow, wrist)
+        val shoulderCenterY = shoulderYs.average().toFloat()
 
-        // Exponential Moving Average (EMA) Filter
-        if (isFirstAngle) {
-            smoothedAngle = rawAngle
-            isFirstAngle = false
+        // 2. Head / Nose Reference
+        val noseY = nose?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+            ?: lEye?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+            ?: rEye?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+            ?: (shoulderCenterY - 120f)
+
+        // 3. Dynamic Scale Unit (Nose to Shoulder Center distance)
+        val scale = abs(shoulderCenterY - noseY).coerceAtLeast(60f)
+
+        // Top of the head: ~0.4 * scale above nose (Y decreases going up)
+        val headTopY = noseY - 0.4f * scale
+
+        // Overhead Target Line: 30% scale above head top (20%-40% zone)
+        val targetOverheadY = headTopY - 0.3f * scale
+
+        // Bottom Rack Position: Hands near or below shoulder level
+        val rackY = shoulderCenterY - 0.15f * scale
+
+        // Ceiling Threshold (top 7% of camera frame height)
+        val ceilingThresholdY = frameHeight * 0.07f
+
+        // Normalized Y ratio for rendering the visual target line on screen
+        val targetLineYRatio = (targetOverheadY / frameHeight).coerceIn(0.08f, 0.65f)
+
+        // 4. Track Hands & Fingertips (Highest point reached by hands)
+        val leftHandYs = listOfNotNull(
+            lWrist?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y,
+            lIndex?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y,
+            lPinky?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+        )
+        val rightHandYs = listOfNotNull(
+            rWrist?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y,
+            rIndex?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y,
+            rPinky?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+        )
+
+        val lHandY = leftHandYs.minOrNull()
+        val rHandY = rightHandYs.minOrNull()
+
+        if (lHandY == null && rHandY == null) {
+            onRepProgress(repCount, targetReps, smoothedProgress, "Bring hands into view at shoulder level", false, targetLineYRatio)
+            return
+        }
+
+        // The highest hand point
+        val highestHandY = listOfNotNull(lHandY, rHandY).minOrNull()!!
+
+        // 5. Track Elbows for Biomechanical Elevation Check
+        val lElbowY = lElbow?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+        val rElbowY = rElbow?.takeIf { it.inFrameLikelihood >= MIN_CONFIDENCE }?.position?.y
+        val highestElbowY = listOfNotNull(lElbowY, rElbowY).minOrNull()
+        val lowestElbowY = listOfNotNull(lElbowY, rElbowY).maxOrNull()
+
+        // Full overhead criteria:
+        // - Hands cross above overhead target line OR hit top ceiling
+        val isHandOverhead = highestHandY <= targetOverheadY || highestHandY <= ceilingThresholdY
+
+        // - Elbows elevated above shoulders
+        val isElbowElevated = (highestElbowY != null && highestElbowY < (shoulderCenterY + 15f)) || (highestHandY <= ceilingThresholdY)
+
+        val isFullOverheadLockout = isHandOverhead && isElbowElevated
+
+        // Rack / Bottom criteria:
+        // - Hands returned to shoulder level
+        val isHandsAtRack = highestHandY >= rackY || (lowestElbowY != null && lowestElbowY > (shoulderCenterY - 0.1f * scale))
+
+        // 6. Smooth Progress Calculation (0.0 at rack -> 1.0 at overhead target)
+        val rawProgress = ((rackY - highestHandY) / (rackY - targetOverheadY)).coerceIn(0f, 1f)
+        if (isFirstProgress) {
+            smoothedProgress = rawProgress
+            isFirstProgress = false
         } else {
-            smoothedAngle = 0.60 * rawAngle + 0.40 * smoothedAngle
+            smoothedProgress = 0.50f * rawProgress + 0.50f * smoothedProgress
         }
 
         val now = System.currentTimeMillis()
-
-        // Coordinate Check: In Android/MLKit, Y increases downwards!
-        // So a lower Y value means physically HIGHER on the screen.
-        val headReferenceY = nose?.position?.y ?: (shoulder.position.y - 120f)
-        val isWristAboveHead = wrist.position.y < headReferenceY
-        val isWristAtShoulders = wrist.position.y >= (headReferenceY - 20f)
-
         var status = ""
+        var isTargetReached = false
 
         when (currentPressState) {
             PressState.AT_SHOULDERS -> {
-                status = "Hands at shoulders • Press up overhead"
-                // Transition to PRESSING_UP when arms begin reaching above shoulders
-                if (wrist.position.y < shoulder.position.y && smoothedAngle > 110.0) {
+                status = "Hands at shoulders • Press straight up overhead"
+                isTargetReached = false
+                if (smoothedProgress > 0.30f && highestHandY < shoulderCenterY) {
                     currentPressState = PressState.PRESSING_UP
                     repStartTimestamp = now
                     status = "Pressing overhead..."
@@ -167,41 +236,42 @@ class PoseAnalyzer(
             }
 
             PressState.PRESSING_UP -> {
-                status = "Press all the way above your head!"
-                // Reached top overhead position: hands above head & arm extended (angle >= 140°)
-                if (isWristAboveHead && smoothedAngle >= 140.0) {
+                status = "Press above the target line!"
+                if (isFullOverheadLockout) {
                     currentPressState = PressState.TOP_OVERHEAD
                     topTimestamp = now
-                    status = "Top reached! Lower down"
-                } else if (isWristAtShoulders && smoothedAngle < 100.0) {
-                    // Aborted rep
+                    isTargetReached = true
+                    status = "✓ Overhead Lockout reached! Now lower down"
+                } else if (isHandsAtRack && smoothedProgress < 0.20f && (now - repStartTimestamp > 1200)) {
+                    // Reset if aborted
                     currentPressState = PressState.AT_SHOULDERS
                 }
             }
 
             PressState.TOP_OVERHEAD -> {
+                isTargetReached = true
                 val holdDuration = now - topTimestamp
                 if (holdDuration >= MIN_TOP_HOLD_MS) {
                     currentPressState = PressState.LOWERING_DOWN
-                    status = "Now lower hands to shoulder level"
+                    status = "Good! Lower hands back to shoulder level"
                 } else {
                     status = "Hold overhead..."
                 }
             }
 
             PressState.LOWERING_DOWN -> {
+                isTargetReached = false
                 status = "Lower hands to shoulders"
-                // Hands returned to shoulder level: rep completed!
-                if (isWristAtShoulders || smoothedAngle <= 115.0) {
+                if (isHandsAtRack || smoothedProgress <= 0.25f) {
                     val totalDuration = now - repStartTimestamp
                     val cooldown = now - lastRepCompletedTimestamp
 
-                    if (totalDuration >= MIN_REP_DURATION_MS && cooldown > 450) {
+                    if (totalDuration >= MIN_REP_DURATION_MS && cooldown > 400) {
                         repCount++
                         lastRepCompletedTimestamp = now
                         status = "✓ Rep $repCount verified!"
 
-                        onRepProgress(repCount, targetReps, smoothedAngle, status)
+                        onRepProgress(repCount, targetReps, smoothedProgress, status, false, targetLineYRatio)
 
                         if (repCount >= targetReps) {
                             onGoalReached()
@@ -213,7 +283,7 @@ class PoseAnalyzer(
             }
         }
 
-        onRepProgress(repCount, targetReps, smoothedAngle, status)
+        onRepProgress(repCount, targetReps, smoothedProgress, status, isTargetReached, targetLineYRatio)
     }
 
     private fun analyzeSquat(pose: Pose) {
@@ -235,22 +305,22 @@ class PoseAnalyzer(
                 Triple(rHip, rKnee, rAnkle)
             }
             else -> {
-                onRepProgress(repCount, targetReps, 180.0, "Legs obscured • Stand back in frame")
+                onRepProgress(repCount, targetReps, 0f, "Legs obscured • Stand back in frame", false, 0.3f)
                 return
             }
         }
 
         val rawAngle = calculateAngle(hip, knee, ankle)
-        smoothedAngle = 0.60 * rawAngle + 0.40 * smoothedAngle
-
         val now = System.currentTimeMillis()
         var status = "Stand tall"
+        var isTargetReached = false
 
-        if (smoothedAngle < 100.0 && currentPressState == PressState.AT_SHOULDERS) {
+        if (rawAngle < 105.0 && currentPressState == PressState.AT_SHOULDERS) {
             currentPressState = PressState.TOP_OVERHEAD
             topTimestamp = now
+            isTargetReached = true
             status = "Good squat depth! Stand up"
-        } else if (smoothedAngle > 155.0 && currentPressState == PressState.TOP_OVERHEAD) {
+        } else if (rawAngle > 155.0 && currentPressState == PressState.TOP_OVERHEAD) {
             if (now - topTimestamp >= 300) {
                 repCount++
                 status = "✓ Squat $repCount counted!"
@@ -262,7 +332,8 @@ class PoseAnalyzer(
             currentPressState = PressState.AT_SHOULDERS
         }
 
-        onRepProgress(repCount, targetReps, smoothedAngle, status)
+        val progress = ((180.0 - rawAngle) / 80.0).toFloat().coerceIn(0f, 1f)
+        onRepProgress(repCount, targetReps, progress, status, isTargetReached, 0.3f)
     }
 
     private fun calculateAngle(first: PoseLandmark, middle: PoseLandmark, last: PoseLandmark): Double {
