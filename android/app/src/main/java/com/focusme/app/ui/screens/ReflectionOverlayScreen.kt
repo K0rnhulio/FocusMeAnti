@@ -19,9 +19,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.Button
@@ -75,20 +78,28 @@ fun ReflectionOverlayScreen(
         "📧 Client emails"
     )
 
+    val isWeb = targetPackage.startsWith("web:")
+    val scrollState = rememberScrollState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
-            .padding(20.dp),
-        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .glassCard(cornerRadius = 28.dp, elevation = 20.dp)
-                .padding(24.dp),
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassCard(cornerRadius = 28.dp, elevation = 20.dp)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             // Header Badge
             Row(
                 modifier = Modifier
@@ -265,6 +276,49 @@ fun ReflectionOverlayScreen(
                 }
             }
 
+            if (isWeb) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .shadow(12.dp, RoundedCornerShape(16.dp), spotColor = Color(0xFF0284C7).copy(alpha = 0.35f))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFF0284C7),
+                                    Color(0xFF2563EB),
+                                    Color(0xFF4F46E5)
+                                )
+                            )
+                        )
+                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .clickable { onCancel() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Return to Google Search",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(10.dp))
 
             // Cancel / Return
@@ -276,11 +330,13 @@ fun ReflectionOverlayScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Nevermind, stay focused in deep work",
+                    text = if (isWeb) "Return to Home Screen" else "Nevermind, stay focused in deep work",
                     fontSize = 12.sp,
                     color = TextDim
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(48.dp))
     }
 }

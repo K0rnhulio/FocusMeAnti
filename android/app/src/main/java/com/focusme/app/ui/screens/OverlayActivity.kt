@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -92,6 +93,20 @@ class OverlayActivity : ComponentActivity() {
 
                 var currentStep by remember { mutableStateOf(reason) }
 
+                BackHandler {
+                    when {
+                        currentStep.startsWith("screen_") -> {
+                            currentStep = "gauntlet_required"
+                        }
+                        isWebTarget -> {
+                            openGoogleSearch()
+                        }
+                        else -> {
+                            goToHomeScreen()
+                        }
+                    }
+                }
+
                 when (currentStep) {
                     "screen_maze" -> {
                         MazeGameScreen(
@@ -146,6 +161,8 @@ class OverlayActivity : ComponentActivity() {
                             isMazeSolved = isMazeSolved,
                             isShakeSolved = isShakeSolved,
                             isPushUpSolved = isPushUpSolved,
+                            isWebTarget = isWebTarget,
+                            onOpenGoogle = { openGoogleSearch() },
                             onLaunchMaze = { currentStep = "screen_maze" },
                             onLaunchShake = { currentStep = "screen_shake" },
                             onLaunchPushUp = { currentStep = "screen_pushup" },
@@ -180,10 +197,14 @@ class OverlayActivity : ComponentActivity() {
     }
 
     private fun openGoogleSearch() {
-        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        try {
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(browserIntent)
+        } catch (e: Exception) {
+            goToHomeScreen()
         }
-        startActivity(browserIntent)
         finish()
     }
 
@@ -208,6 +229,8 @@ fun GauntletTollGateScreen(
     isMazeSolved: Boolean,
     isShakeSolved: Boolean,
     isPushUpSolved: Boolean,
+    isWebTarget: Boolean = false,
+    onOpenGoogle: () -> Unit = {},
     onLaunchMaze: () -> Unit,
     onLaunchShake: () -> Unit,
     onLaunchPushUp: () -> Unit,
@@ -226,185 +249,270 @@ fun GauntletTollGateScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .shadow(28.dp, RoundedCornerShape(32.dp), spotColor = AccentCyan.copy(alpha = 0.25f))
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color(0xE60F172A))
-                .border(1.dp, GlassBorderGradient, RoundedCornerShape(32.dp))
+                .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(24.dp),
+                .padding(horizontal = 16.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Badge
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(9999.dp))
-                    .background(AccentIndigo.copy(alpha = 0.18f))
-                    .border(1.dp, AccentIndigo.copy(alpha = 0.4f), RoundedCornerShape(9999.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = AccentCyan,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "DISCIPLINE TOLL GATES ($completedCount/3)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = AccentCyan,
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Unlock 5-Minute Session for $targetName",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = TextMain,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = "Prove your discipline to earn this break. Clear all 3 physical and cognitive gates below:",
-                fontSize = 12.sp,
-                color = TextMuted,
-                textAlign = TextAlign.Center,
-                lineHeight = 17.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Progress Bar
-            LinearProgressIndicator(
-                progress = { completedCount / 3f },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = if (allCleared) AccentEmerald else AccentCyan,
-                trackColor = CardInner
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // GATE 1: Tilt Maze
-            TollGateRowCard(
-                title = "1. Gyroscope Labyrinth Maze",
-                subtitle = "Cognitive control • Tilt phone to guide ball to cheese",
-                icon = Icons.Default.SportsEsports,
-                isCompleted = isMazeSolved,
-                onClick = onLaunchMaze
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // GATE 2: 50 Shakes
-            TollGateRowCard(
-                title = "2. 50-Shake Kinetic Surge",
-                subtitle = "Physical energy • Pump phone to spike heart rate",
-                icon = Icons.Default.Bolt,
-                isCompleted = isShakeSolved,
-                onClick = onLaunchShake
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // GATE 3: AI Overhead Air Press
-            TollGateRowCard(
-                title = "3. AI Overhead Air Press (5 Reps)",
-                subtitle = "Desk pose • Raise hands straight overhead above head level",
-                icon = Icons.Default.FitnessCenter,
-                isCompleted = isPushUpSolved,
-                onClick = onLaunchPushUp
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Action Button: Unlocks when all 3 gates are cleared
-            if (allCleared) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .shadow(16.dp, RoundedCornerShape(16.dp), spotColor = AccentEmerald.copy(alpha = 0.45f))
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(SuccessGradient)
-                        .clickable { onProceedToReflection() },
-                    contentAlignment = Alignment.Center
+                    .shadow(28.dp, RoundedCornerShape(32.dp), spotColor = AccentCyan.copy(alpha = 0.25f))
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color(0xE60F172A))
+                    .border(1.dp, GlassBorderGradient, RoundedCornerShape(32.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header Row with status badge and quick Google exit
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "All 3 Gates Cleared • Unlock Session ➔",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(CardInner.copy(alpha = 0.6f))
-                        .border(1.dp, Color(0x33475569), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9999.dp))
+                            .background(AccentIndigo.copy(alpha = 0.18f))
+                            .border(1.dp, AccentIndigo.copy(alpha = 0.4f), RoundedCornerShape(9999.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
                             contentDescription = null,
-                            tint = TextDim,
-                            modifier = Modifier.size(16.dp)
+                            tint = AccentCyan,
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Solve ${3 - completedCount} More Gate(s) to Unlock",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDim
+                            text = "DISCIPLINE TOLL GATES ($completedCount/3)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = AccentCyan,
+                            letterSpacing = 1.sp
                         )
                     }
+
+                    if (isWebTarget) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(9999.dp))
+                                .background(Color(0xFF0284C7).copy(alpha = 0.18f))
+                                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f), RoundedCornerShape(9999.dp))
+                                .clickable { onOpenGoogle() }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = AccentCyan,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Google",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentCyan
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Unlock 5-Minute Session for $targetName",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextMain,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Prove your discipline to earn this break. Clear all 3 physical and cognitive gates below:",
+                    fontSize = 12.sp,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 17.sp
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Progress Bar
+                LinearProgressIndicator(
+                    progress = { completedCount / 3f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = if (allCleared) AccentEmerald else AccentCyan,
+                    trackColor = CardInner
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // GATE 1: Tilt Maze
+                TollGateRowCard(
+                    title = "1. Gyroscope Labyrinth Maze",
+                    subtitle = "Cognitive control • Tilt phone to guide ball to cheese",
+                    icon = Icons.Default.SportsEsports,
+                    isCompleted = isMazeSolved,
+                    onClick = onLaunchMaze
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // GATE 2: 50 Shakes
+                TollGateRowCard(
+                    title = "2. 50-Shake Kinetic Surge",
+                    subtitle = "Physical energy • Pump phone to spike heart rate",
+                    icon = Icons.Default.Bolt,
+                    isCompleted = isShakeSolved,
+                    onClick = onLaunchShake
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // GATE 3: AI Overhead Air Press
+                TollGateRowCard(
+                    title = "3. AI Overhead Air Press (5 Reps)",
+                    subtitle = "Desk pose • Raise hands straight overhead above head level",
+                    icon = Icons.Default.FitnessCenter,
+                    isCompleted = isPushUpSolved,
+                    onClick = onLaunchPushUp
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Action Button: Unlocks when all 3 gates are cleared
+                if (allCleared) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .shadow(16.dp, RoundedCornerShape(16.dp), spotColor = AccentEmerald.copy(alpha = 0.45f))
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(SuccessGradient)
+                            .clickable { onProceedToReflection() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "All 3 Gates Cleared • Unlock Session ➔",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(CardInner.copy(alpha = 0.6f))
+                            .border(1.dp, Color(0x33475569), RoundedCornerShape(16.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = TextDim,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Solve ${3 - completedCount} More Gate(s) to Unlock",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextDim
+                            )
+                        }
+                    }
+                }
+
+                // If web target, prominent Google Search button
+                if (isWebTarget) {
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color(0xFF0284C7).copy(alpha = 0.4f))
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF0284C7),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF4F46E5)
+                                    )
+                                )
+                            )
+                            .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                            .clickable { onOpenGoogle() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Return to Google Search",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Return to focus / Home
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onReturnToLife() }
+                        .padding(6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isWebTarget) "Return to Home Screen" else "Stay focused in deep work (Return to Home)",
+                        fontSize = 12.sp,
+                        color = TextDim
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Return to focus
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onReturnToLife() }
-                    .padding(6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Stay focused in deep work (Return to Home)",
-                    fontSize = 12.sp,
-                    color = TextDim
-                )
-            }
+            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 }
@@ -535,223 +643,273 @@ fun PurposeRealityCheckScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .shadow(28.dp, RoundedCornerShape(32.dp), spotColor = AccentCyan.copy(alpha = 0.25f))
-                .clip(RoundedCornerShape(32.dp))
-                .background(realityGradient)
-                .border(1.dp, GlassBorderGradient, RoundedCornerShape(32.dp))
+                .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(24.dp),
+                .padding(horizontal = 16.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(9999.dp))
-                    .background(Color(0xFFF59E0B).copy(alpha = 0.12f))
-                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f), RoundedCornerShape(9999.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.HourglassTop,
-                    contentDescription = null,
-                    tint = Color(0xFFFBBF24),
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "MEMENTO MORI • TIME IS FINITE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFFBBF24),
-                    letterSpacing = 1.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "Is $targetName moving you closer to your real life?",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = TextMain,
-                textAlign = TextAlign.Center,
-                lineHeight = 28.sp
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(lifeGoalGlowGradient)
-                    .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f), RoundedCornerShape(20.dp))
-                    .padding(16.dp)
+                    .shadow(28.dp, RoundedCornerShape(32.dp), spotColor = AccentCyan.copy(alpha = 0.25f))
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(realityGradient)
+                    .border(1.dp, GlassBorderGradient, RoundedCornerShape(32.dp))
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column {
+                // Header with quick Google exit if web
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9999.dp))
+                            .background(Color(0xFFF59E0B).copy(alpha = 0.12f))
+                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f), RoundedCornerShape(9999.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color(0xFFFBBF24),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "YOUR NORTH STAR GOAL",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFBBF24),
-                                letterSpacing = 0.8.sp
-                            )
+                        Icon(
+                            imageVector = Icons.Default.HourglassTop,
+                            contentDescription = null,
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "MEMENTO MORI • TIME IS FINITE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFFBBF24),
+                            letterSpacing = 1.sp
+                        )
+                    }
+
+                    if (isWebTarget) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(9999.dp))
+                                .background(Color(0xFF0284C7).copy(alpha = 0.18f))
+                                .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f), RoundedCornerShape(9999.dp))
+                                .clickable { onOpenGoogle() }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = AccentCyan,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Google",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentCyan
+                                )
+                            }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "\"$lifeGoal\"",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextMain,
-                        lineHeight = 22.sp,
-                        fontFamily = FontFamily.Default
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF1F1622).copy(alpha = 0.7f))
-                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.25f), RoundedCornerShape(16.dp))
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Text("❌ The Dopamine Trap", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentRose)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Brain fog, wasted hours, lost momentum, and regret.",
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            lineHeight = 15.sp
-                        )
-                    }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF102820).copy(alpha = 0.7f))
-                        .border(1.dp, Color(0xFF10B981).copy(alpha = 0.25f), RoundedCornerShape(16.dp))
-                        .padding(12.dp)
-                ) {
-                    Column {
-                        Text("🏆 The Deep Work Pride", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentEmeraldGlow)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Real achievements, financial freedom, clarity, and peace of mind.",
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-            }
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Is $targetName moving you closer to your real life?",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextMain,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 28.sp
+                )
 
-            Text(
-                text = "Today will only happen once in your entire life. Do not trade your irreplaceable energy for an algorithm.",
-                fontSize = 12.sp,
-                color = TextDim,
-                textAlign = TextAlign.Center,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .shadow(16.dp, RoundedCornerShape(16.dp), spotColor = AccentEmerald.copy(alpha = 0.4f))
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(actionButtonGradient)
-                    .clickable { onReturnToLife() },
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Choose My Real Goals & Life",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
-                    )
-                }
-            }
-
-            if (isWebTarget) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF1E293B).copy(alpha = 0.8f))
-                        .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                        .clickable { onOpenGoogle() }
-                        .padding(horizontal = 14.dp),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(lifeGoalGlowGradient)
+                        .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+                        .padding(16.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = AccentCyan,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "YOUR NORTH STAR GOAL",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFBBF24),
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Text(
-                            text = "Search On Google Instead (Work & Study)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMain
+                            text = "\"$lifeGoal\"",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextMain,
+                            lineHeight = 22.sp,
+                            fontFamily = FontFamily.Default
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF1F1622).copy(alpha = 0.7f))
+                            .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Text("❌ The Dopamine Trap", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentRose)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Brain fog, wasted hours, lost momentum, and regret.",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF102820).copy(alpha = 0.7f))
+                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column {
+                            Text("🏆 The Deep Work Pride", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AccentEmeraldGlow)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Real achievements, financial freedom, clarity, and peace of mind.",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "Today will only happen once in your entire life. Do not trade your irreplaceable energy for an algorithm.",
+                    fontSize = 12.sp,
+                    color = TextDim,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .shadow(16.dp, RoundedCornerShape(16.dp), spotColor = AccentEmerald.copy(alpha = 0.4f))
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(actionButtonGradient)
+                        .clickable { onReturnToLife() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Choose My Real Goals & Life",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                if (isWebTarget) {
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color(0xFF0284C7).copy(alpha = 0.4f))
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF0284C7),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF4F46E5)
+                                    )
+                                )
+                            )
+                            .border(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                            .clickable { onOpenGoogle() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Search On Google Instead (Work & Study)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 }
