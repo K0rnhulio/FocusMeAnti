@@ -75,6 +75,14 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    suspend fun resetHourlyGates() {
+        context.dataStore.edit {
+            it.remove(KEY_GATE_MAZE_HOUR)
+            it.remove(KEY_GATE_SHAKE_HOUR)
+            it.remove(KEY_GATE_PUSHUP_HOUR)
+        }
+    }
+
     suspend fun setMorningUnlockedToday() {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         context.dataStore.edit { it[KEY_MORNING_DATE] = today }

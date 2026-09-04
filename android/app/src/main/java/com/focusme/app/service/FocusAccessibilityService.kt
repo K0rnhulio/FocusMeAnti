@@ -2,9 +2,13 @@ package com.focusme.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.text.TextUtils
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -59,8 +63,27 @@ class FocusAccessibilityService : AccessibilityService() {
             "x.com",
             "facebook.com",
             "instagram.com",
-            "tiktok.com"
+            "tiktok.com",
+            "youtube.com"
         )
+
+        fun isEnabled(context: Context): Boolean {
+            val expectedComponentName = ComponentName(context, FocusAccessibilityService::class.java)
+            val enabledServicesSetting = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+            val colonSplitter = TextUtils.SimpleStringSplitter(':')
+            colonSplitter.setString(enabledServicesSetting)
+            while (colonSplitter.hasNext()) {
+                val componentNameString = colonSplitter.next()
+                val enabledComponent = ComponentName.unflattenFromString(componentNameString)
+                if (enabledComponent != null && enabledComponent == expectedComponentName) {
+                    return true
+                }
+            }
+            return false
+        }
     }
 
     override fun onServiceConnected() {
@@ -85,6 +108,7 @@ class FocusAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         val packageName = event.packageName?.toString() ?: return
+        if (packageName == applicationContext.packageName) return // Ignore events from our own app
 
         // 1. Zalo Full Newsfeed & Video Tab Blocker
         if (packageName.contains("zalo")) {
@@ -105,9 +129,10 @@ class FocusAccessibilityService : AccessibilityService() {
         }
 
         // 4. Standalone Target Apps Evaluation (Reddit, Twitter/X, FB, IG, TikTok, YouTube)
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || 
-            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            currentForegroundPackage = packageName
+            evaluateAppDiscipline(packageName)
+        } else if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             if (currentForegroundPackage != packageName) {
                 currentForegroundPackage = packageName
                 evaluateAppDiscipline(packageName)
@@ -385,19 +410,27 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     private fun evaluateAppDiscipline(pkg: String) {
+        if (pkg == applicationContext.packageName) return // Never block our own app
+
         val now = System.currentTimeMillis()
-        if (now - lastBlockedTimestamp < 800) return // Debounce
+        if (now - lastBlockedTimestamp < 600) return // Debounce
 
         serviceScope.launch {
             val prefs = FocusMeApp.instance.preferences
             val blockedSet = prefs.blockedPackages.first()
-            
+            val lowerPkg = pkg.toLowerCase(Locale.getDefault())
+
             val isBlocked = blockedSet.contains(pkg) || 
-                            pkg.contains("reddit") || 
-                            pkg.contains("twitter") || 
-                            pkg.contains("katana") || 
-                            pkg.contains("instagram") ||
-                            pkg.startsWith("web:")
+                            lowerPkg.contains("reddit") || 
+                            lowerPkg.contains("twitter") || 
+                            lowerPkg.contains("katana") || 
+                            lowerPkg.contains("facebook") || 
+                            lowerPkg.contains("instagram") || 
+                            lowerPkg.contains("tiktok") || 
+                            lowerPkg.contains("musically") || 
+                            lowerPkg.contains("youtube") || 
+                            lowerPkg.contains("snapchat") || 
+                            lowerPkg.startsWith("web:")
 
             if (!isBlocked) {
                 stopHeartbeat()
@@ -517,8 +550,7 @@ class FocusAccessibilityService : AccessibilityService() {
         val intent = Intent(this, OverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or 
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("overlay_reason", reason)
             putExtra("target_package", targetPkg)
         }

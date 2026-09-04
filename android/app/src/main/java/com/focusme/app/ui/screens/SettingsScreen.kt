@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focusme.app.FocusMeApp
 import com.focusme.app.data.preferences.AppPreferences
+import com.focusme.app.service.FocusAccessibilityService
 import com.focusme.app.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -248,7 +249,7 @@ fun SettingsScreen() {
                     title = "Accessibility Engine",
                     subtitle = "Blocks target apps & in-app newsfeeds",
                     icon = Icons.Rounded.Shield,
-                    granted = true,
+                    granted = FocusAccessibilityService.isEnabled(context),
                     onClick = {
                         context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     }

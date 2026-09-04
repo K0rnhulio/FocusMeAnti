@@ -69,12 +69,21 @@ import java.util.Locale
 
 class OverlayActivity : ComponentActivity() {
 
+    private var currentReason by mutableStateOf("gauntlet_required")
+    private var currentTargetPkg by mutableStateOf("")
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        currentReason = intent.getStringExtra("overlay_reason") ?: "gauntlet_required"
+        currentTargetPkg = intent.getStringExtra("target_package") ?: ""
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val reason = intent.getStringExtra("overlay_reason") ?: "gauntlet_required"
-        val targetPkg = intent.getStringExtra("target_package") ?: ""
-        val isWebTarget = targetPkg.startsWith("web:")
+        currentReason = intent.getStringExtra("overlay_reason") ?: "gauntlet_required"
+        currentTargetPkg = intent.getStringExtra("target_package") ?: ""
 
         setContent {
             FocusMeTheme {
@@ -91,7 +100,9 @@ class OverlayActivity : ComponentActivity() {
                 val isPushUpSolved = pushUpHour == hourKey
                 val allGatesCleared = isMazeSolved && isShakeSolved && isPushUpSolved
 
-                var currentStep by remember { mutableStateOf(reason) }
+                var currentStep by remember(currentReason) { mutableStateOf(currentReason) }
+                val targetPkg = currentTargetPkg
+                val isWebTarget = targetPkg.startsWith("web:")
 
                 BackHandler {
                     when {

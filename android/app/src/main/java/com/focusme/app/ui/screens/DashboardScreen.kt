@@ -1,5 +1,8 @@
 package com.focusme.app.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -28,12 +31,14 @@ import androidx.compose.material.icons.rounded.Games
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,11 +46,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focusme.app.FocusMeApp
+import com.focusme.app.service.FocusAccessibilityService
 import com.focusme.app.ui.theme.*
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -57,6 +65,10 @@ fun DashboardScreen(
     onLaunchShakes: () -> Unit,
     onLaunchPushUps: () -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val isAccessibilityActive = FocusAccessibilityService.isEnabled(context)
+
     val db = FocusMeApp.instance.database
     val prefs = FocusMeApp.instance.preferences
     val hourKey = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault()).format(Date())
@@ -134,15 +146,37 @@ fun DashboardScreen(
                 }
 
                 // Active Protection Status Chip
+                val statusBg = when {
+                    !isAccessibilityActive -> Color(0x33EF4444)
+                    isPermittedWindow -> AccentEmerald.copy(alpha = 0.12f)
+                    else -> Color(0x22EF4444)
+                }
+                val statusBorder = when {
+                    !isAccessibilityActive -> AccentRose.copy(alpha = 0.6f)
+                    isPermittedWindow -> AccentEmerald.copy(alpha = 0.3f)
+                    else -> AccentRose.copy(alpha = 0.3f)
+                }
+                val statusDot = when {
+                    !isAccessibilityActive -> AccentRose
+                    isPermittedWindow -> AccentEmerald
+                    else -> AccentRose
+                }
+                val statusText = when {
+                    !isAccessibilityActive -> "Service OFF"
+                    isPermittedWindow -> "Active (10AM - 9PM)"
+                    else -> "Restricted (Locked)"
+                }
+                val statusTextColor = when {
+                    !isAccessibilityActive -> AccentRose
+                    isPermittedWindow -> AccentEmeraldGlow
+                    else -> AccentRose
+                }
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(9999.dp))
-                        .background(if (isPermittedWindow) AccentEmerald.copy(alpha = 0.12f) else Color(0x22EF4444))
-                        .border(
-                            1.dp,
-                            if (isPermittedWindow) AccentEmerald.copy(alpha = 0.3f) else AccentRose.copy(alpha = 0.3f),
-                            RoundedCornerShape(9999.dp)
-                        )
+                        .background(statusBg)
+                        .border(1.dp, statusBorder, RoundedCornerShape(9999.dp))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,15 +184,84 @@ fun DashboardScreen(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(if (isPermittedWindow) AccentEmerald else AccentRose)
+                                .background(statusDot)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isPermittedWindow) "Active (10AM - 9PM)" else "Restricted (Locked)",
+                            text = statusText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPermittedWindow) AccentEmeraldGlow else AccentRose
+                            color = statusTextColor
                         )
+                    }
+                }
+            }
+        }
+
+        // Prominent Warning Banner if Accessibility is disabled
+        if (!isAccessibilityActive) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(16.dp, RoundedCornerShape(20.dp), spotColor = AccentRose.copy(alpha = 0.45f))
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF7F1D1D), Color(0xFF991B1B))
+                            )
+                        )
+                        .border(1.dp, AccentRose.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                        .clickable {
+                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Warning,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Accessibility Service is OFF",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Android paused it during app update. Tap here to turn it back ON.",
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.White)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Turn ON ➔",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF991B1B)
+                            )
+                        }
                     }
                 }
             }
@@ -267,12 +370,41 @@ fun DashboardScreen(
 
         // Physical & Mental Challenge Gates Header
         item {
-            Text(
-                text = "⚡ Physical & Cognitive Toll Gates",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMain
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚡ Physical & Cognitive Toll Gates",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextMain
+                )
+
+                if (isMazeSolved || isShakeSolved || isPushUpSolved) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AccentRose.copy(alpha = 0.15f))
+                            .border(1.dp, AccentRose.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable {
+                                scope.launch {
+                                    prefs.resetHourlyGates()
+                                    Toast.makeText(context, "Toll gates reset! Apps locked 🔒", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Reset & Lock 🔒",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AccentRose
+                        )
+                    }
+                }
+            }
         }
 
         // Challenge Launchers Row
