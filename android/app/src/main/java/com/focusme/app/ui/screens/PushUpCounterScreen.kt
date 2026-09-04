@@ -86,7 +86,17 @@ fun PushUpCounterScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
-    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    val activeOrbList = remember(targetReps) { orbList.take(targetReps.coerceIn(1, orbList.size)) }
+
+    val vibrator = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+            vibratorManager?.defaultVibrator ?: (@Suppress("DEPRECATION") context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -242,8 +252,8 @@ fun PushUpCounterScreen(
                                         handPoints = hands
 
                                         // Collision Detection with Current Active Orb
-                                        if (!isDone && poppedCount < orbList.size) {
-                                            val target = orbList[poppedCount]
+                                        if (!isDone && poppedCount < activeOrbList.size) {
+                                            val target = activeOrbList[poppedCount]
                                             var isHit = false
 
                                             for (pt in hands) {
@@ -267,7 +277,7 @@ fun PushUpCounterScreen(
                                                     vibrator.vibrate(VibrationEffect.createOneShot(70, VibrationEffect.DEFAULT_AMPLITUDE))
                                                 }
 
-                                                if (poppedIndex + 1 >= orbList.size) {
+                                                if (poppedIndex + 1 >= activeOrbList.size) {
                                                     isDone = true
                                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                                         vibrator.vibrate(VibrationEffect.createOneShot(350, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -347,8 +357,8 @@ fun PushUpCounterScreen(
                 }
 
                 // 2. Active Popping Orb (Top 5% - 25% Zone)
-                if (!isDone && poppedCount < orbList.size) {
-                    val activeOrb = orbList[poppedCount]
+                if (!isDone && poppedCount < activeOrbList.size) {
+                    val activeOrb = activeOrbList[poppedCount]
                     val orbX = screenWidth * activeOrb.xRatio
                     val orbY = screenHeight * activeOrb.yRatio
 
@@ -498,7 +508,7 @@ fun PushUpCounterScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text = "$poppedCount / ${orbList.size} Orbs Popped",
+                                text = "$poppedCount / ${activeOrbList.size} Orbs Popped",
                                 fontSize = 34.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (isDone) AccentEmeraldGlow else TextMain,
@@ -512,7 +522,7 @@ fun PushUpCounterScreen(
                                 modifier = Modifier.fillMaxWidth(0.85f),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                for (i in 0 until orbList.size) {
+                                for (i in 0 until activeOrbList.size) {
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
@@ -529,11 +539,11 @@ fun PushUpCounterScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             val currentPrompt = if (isDone) {
-                                "✓ All 10 Orbs Popped! Excellent stretch!"
+                                "✓ All ${activeOrbList.size} Orbs Popped! Excellent stretch!"
                             } else if (!isHeadAligned) {
                                 "Anchor head in the center guide to target orbs"
                             } else {
-                                orbList[poppedCount].label
+                                activeOrbList[poppedCount].label
                             }
 
                             Text(
