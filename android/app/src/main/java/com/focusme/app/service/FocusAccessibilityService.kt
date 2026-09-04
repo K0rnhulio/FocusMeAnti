@@ -95,6 +95,7 @@ class FocusAccessibilityService : AccessibilityService() {
         // 3. Browser URL Interception (Chrome, Samsung Internet, Firefox...)
         if (BROWSER_PACKAGES.contains(packageName)) {
             handleBrowserUrlCheck(rootInActiveWindow, packageName)
+            return // Do NOT fall through to standalone app evaluation!
         }
 
         // 4. Standalone Target Apps Evaluation (Reddit, Twitter/X, FB, IG, TikTok, YouTube)
@@ -186,7 +187,6 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     private fun isZaloVideoFeedActive(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent): Boolean {
-        // Check event class name
         val className = event.className?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
         if (className.contains("video") || className.contains("player") || className.contains("zinstant")) {
             return true
@@ -194,7 +194,6 @@ class FocusAccessibilityService : AccessibilityService() {
 
         if (rootNode == null) return false
 
-        // Check for specific video UI signatures in Zalo
         val videoKeywords = listOf(
             "lướt để xem video",
             "dành cho bạn",
@@ -246,7 +245,6 @@ class FocusAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Click the "Tin nhắn" or "Messages" tab (Tab 0)
         val chatKeywords = listOf("Tin nhắn", "Messages", "Chats")
         for (kw in chatKeywords) {
             val nodes = rootNode.findAccessibilityNodeInfosByText(kw)
@@ -262,7 +260,6 @@ class FocusAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Fallback: Back button to close the video / feed
         performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
@@ -314,6 +311,10 @@ class FocusAccessibilityService : AccessibilityService() {
         performGlobalAction(GLOBAL_ACTION_BACK)
     }
 
+    /**
+     * Precise Browser URL Interception & Dwell Time Tracker:
+     * Scans for blocked domains (Reddit, Twitter, etc.) inside Chrome, Samsung Internet, Firefox...
+     */
     private fun handleBrowserUrlCheck(rootNode: AccessibilityNodeInfo?, browserPkg: String) {
         if (rootNode == null) return
 
@@ -321,7 +322,8 @@ class FocusAccessibilityService : AccessibilityService() {
             "$browserPkg:id/url_bar",
             "$browserPkg:id/location_bar_edit_text",
             "$browserPkg:id/search_box",
-            "$browserPkg:id/toolbar"
+            "$browserPkg:id/toolbar",
+            "$browserPkg:id/url_bar_title"
         )
 
         var detectedUrl: String? = null
@@ -333,12 +335,39 @@ class FocusAccessibilityService : AccessibilityService() {
             }
         }
 
+        // Fallback: search for domain text if URL bar is collapsed
+        if (detectedUrl == null) {
+            for (domain in BLOCKED_DOMAINS) {
+                val nodes = rootNode.findAccessibilityNodeInfosByText(domain)
+                if (nodes.isNotEmpty()) {
+                    detectedUrl = domain
+                    break
+                }
+            }
+        }
+
+        var matchedDomain: String? = null
         if (detectedUrl != null) {
             for (domain in BLOCKED_DOMAINS) {
                 if (detectedUrl.contains(domain)) {
-                    evaluateAppDiscipline("web:$domain")
+                    matchedDomain = domain
                     break
                 }
+            }
+        }
+
+        if (matchedDomain != null) {
+            val webTarget = "web:$matchedDomain"
+            if (currentForegroundPackage != webTarget) {
+                currentForegroundPackage = webTarget
+                evaluateAppDiscipline(webTarget)
+            }
+        } else {
+            // User is in browser, but on an allowed page (e.g. google.com, stackoverflow)
+            if (currentForegroundPackage.startsWith("web:")) {
+                currentForegroundPackage = browserPkg
+                stopHeartbeat()
+                OverlayService.hidePill(this@FocusAccessibilityService)
             }
         }
     }
@@ -371,6 +400,8 @@ class FocusAccessibilityService : AccessibilityService() {
             // 1. Outside 10:00 AM - 9:00 PM: 100% Lockout
             if (currentHour < startHour || currentHour >= endHour) {
                 lastBlockedTimestamp = now
+                stopHeartbeat()
+                OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("outside_schedule", pkg)
                 return@launch
             }
@@ -383,6 +414,8 @@ class FocusAccessibilityService : AccessibilityService() {
             // 2. Hourly Quota Exhausted: 100% Lockout
             if (usage.usedSeconds >= quota) {
                 lastBlockedTimestamp = now
+                stopHeartbeat()
+                OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("quota_exhausted", pkg)
                 return@launch
             }
@@ -390,6 +423,8 @@ class FocusAccessibilityService : AccessibilityService() {
             // 3. 30-Min Mindful Reflection Required
             if (!usage.hasReflected) {
                 lastBlockedTimestamp = now
+                stopHeartbeat()
+                OverlayService.hidePill(this@FocusAccessibilityService)
                 launchLockOverlay("reflection_required", pkg)
                 return@launch
             }
@@ -403,15 +438,22 @@ class FocusAccessibilityService : AccessibilityService() {
         heartbeatJob?.cancel()
         heartbeatJob = serviceScope.launch {
             val usageDao = FocusMeApp.instance.database.usageDao()
+            val prefs = FocusMeApp.instance.preferences
+
             while (isActive && currentForegroundPackage == pkg) {
                 val usage = usageDao.getUsage(hourKey) ?: HourlyUsage(hourKey = hourKey, usedSeconds = 0)
                 val newUsed = usage.usedSeconds + 1
                 usageDao.insertOrUpdate(usage.copy(usedSeconds = newUsed, lastUpdated = System.currentTimeMillis()))
 
                 val remaining = (quota - newUsed).coerceAtLeast(0)
-                OverlayService.showPill(this@FocusAccessibilityService, remaining)
+
+                val showPillEnabled = prefs.showPill.first()
+                if (showPillEnabled) {
+                    OverlayService.showPill(this@FocusAccessibilityService, remaining)
+                }
 
                 if (remaining <= 0) {
+                    OverlayService.hidePill(this@FocusAccessibilityService)
                     launchLockOverlay("quota_exhausted", pkg)
                     break
                 }

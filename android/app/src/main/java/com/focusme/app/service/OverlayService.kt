@@ -3,21 +3,25 @@ package com.focusme.app.service
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.TypedValue
 import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
+import android.widget.LinearLayout
 import android.widget.TextView
-import com.focusme.app.R
 
 class OverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var pillView: View? = null
+    private var timerTextView: TextView? = null
 
     companion object {
         private const val ACTION_SHOW_PILL = "com.focusme.SHOW_PILL"
@@ -29,14 +33,18 @@ class OverlayService : Service() {
                 action = ACTION_SHOW_PILL
                 putExtra(EXTRA_REMAINING_SECS, remainingSeconds)
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {}
         }
 
         fun hidePill(context: Context) {
             val intent = Intent(context, OverlayService::class.java).apply {
                 action = ACTION_HIDE_PILL
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {}
         }
     }
 
@@ -61,6 +69,7 @@ class OverlayService : Service() {
         val mins = remainingSecs / 60
         val secs = remainingSecs % 60
         val timeStr = String.format("%02d:%02d", mins, secs)
+        val isLowTime = remainingSecs <= 60
 
         if (windowManager == null) {
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -74,35 +83,74 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
+            // Density conversion
+            val density = resources.displayMetrics.density
+            val marginEndPx = (18 * density).toInt()
+            val marginBottomPx = (56 * density).toInt()
+
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or 
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.BOTTOM or Gravity.END
-                x = 40
-                y = 100
+                x = marginEndPx
+                y = marginBottomPx
             }
 
-            // Simple programmatic TextView pill
-            val textView = TextView(this).apply {
-                text = "⏱️ $timeStr left"
-                setBackgroundColor(0xDD0F172A.toInt())
-                setTextColor(0xFF38BDF8.toInt())
-                setPadding(28, 16, 28, 16)
-                textSize = 14f
-                elevation = 12f
+            // Beautiful Obsidian Glassmorphic Container
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val padH = (14 * density).toInt()
+                val padV = (8 * density).toInt()
+                setPadding(padH, padV, padH, padV)
+                elevation = 16f
             }
 
-            pillView = textView
+            updatePillBackground(container, isLowTime)
+
+            // Timer Text View with Tabular Figures
+            val tv = TextView(this).apply {
+                text = "⏱️ $timeStr"
+                setTextColor(if (isLowTime) Color.parseColor("#F43F5E") else Color.parseColor("#38BDF8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
+
+            container.addView(tv)
+            timerTextView = tv
+            pillView = container
+
             try {
                 windowManager?.addView(pillView, params)
             } catch (e: Exception) {}
         } else {
-            (pillView as? TextView)?.text = "⏱️ $timeStr left"
+            // Update existing view
+            timerTextView?.text = "⏱️ $timeStr"
+            timerTextView?.setTextColor(if (isLowTime) Color.parseColor("#F43F5E") else Color.parseColor("#38BDF8"))
+            (pillView as? LinearLayout)?.let { updatePillBackground(it, isLowTime) }
         }
+    }
+
+    private fun updatePillBackground(view: View, isLowTime: Boolean) {
+        val density = resources.displayMetrics.density
+        val cornerRadius = 30f * density
+        val strokeWidth = (1.5f * density).toInt()
+        val strokeColor = if (isLowTime) Color.parseColor("#66F43F5E") else Color.parseColor("#5538BDF8")
+        val bgColor = Color.parseColor("#E60B1220")
+
+        val drawable = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            this.cornerRadius = cornerRadius
+            setColor(bgColor)
+            setStroke(strokeWidth, strokeColor)
+        }
+        view.background = drawable
     }
 
     private fun removePill() {
@@ -111,6 +159,7 @@ class OverlayService : Service() {
                 windowManager?.removeView(pillView)
             } catch (e: Exception) {}
             pillView = null
+            timerTextView = null
         }
     }
 
