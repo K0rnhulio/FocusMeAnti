@@ -30,6 +30,9 @@ class AppPreferences(private val context: Context) {
         val KEY_REACTIVE_NIGHT = booleanPreferencesKey("reactive_night_messaging")
         val KEY_MORNING_DATE = stringPreferencesKey("morning_unlocked_date")
         val KEY_REACTIVE_EXPIRY = stringPreferencesKey("reactive_pass_expiry") // Format: timestamp
+        val KEY_LIFE_GOAL = stringPreferencesKey("life_goal_statement")
+
+        const val DEFAULT_LIFE_GOAL = "Build financial freedom, master my craft & create a legendary life for my family."
 
         val DEFAULT_BLOCKED_PACKAGES = setOf(
             "com.twitter.android",
@@ -50,10 +53,15 @@ class AppPreferences(private val context: Context) {
     val zaloVideoBlock: Flow<Boolean> = context.dataStore.data.map { it[KEY_ZALO_VIDEO_BLOCK] ?: true }
     val reactiveNight: Flow<Boolean> = context.dataStore.data.map { it[KEY_REACTIVE_NIGHT] ?: true }
     val morningUnlockedDate: Flow<String> = context.dataStore.data.map { it[KEY_MORNING_DATE] ?: "" }
+    val lifeGoal: Flow<String> = context.dataStore.data.map { it[KEY_LIFE_GOAL] ?: DEFAULT_LIFE_GOAL }
 
     suspend fun setMorningUnlockedToday() {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         context.dataStore.edit { it[KEY_MORNING_DATE] = today }
+    }
+
+    suspend fun setLifeGoal(goal: String) {
+        context.dataStore.edit { it[KEY_LIFE_GOAL] = goal }
     }
 
     suspend fun updateBlockedPackages(packages: Set<String>) {

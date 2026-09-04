@@ -1,9 +1,14 @@
 package com.focusme.app.ui.screens
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -26,11 +31,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,10 +49,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -61,161 +72,302 @@ fun PushUpCounterScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasCameraPermission = isGranted
+    }
+
+    var useFrontCamera by remember { mutableStateOf(true) }
     var repCount by remember { mutableIntStateOf(0) }
     var currentAngle by remember { mutableDoubleStateOf(180.0) }
+    var poseDetected by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
     ) {
-        // Camera Preview Feed
-        AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-
-                    val analyzer = PoseAnalyzer(
-                        isPushUpMode = true,
-                        targetReps = targetReps,
-                        onRepProgress = { count, _, angle ->
-                            repCount = count
-                            currentAngle = angle
-                        },
-                        onGoalReached = {
-                            isDone = true
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
-                            }
-                        }
-                    )
-
-                    imageAnalysis.setAnalyzer(cameraExecutor, analyzer)
-
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            CameraSelector.DEFAULT_FRONT_CAMERA,
-                            preview,
-                            imageAnalysis
-                        )
-                    } catch (e: Exception) {}
-                }, ContextCompat.getMainExecutor(ctx))
-
-                previewView
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // Overlay HUD
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Glass Header
-            Row(
+        if (!hasCameraPermission) {
+            // Camera Permission Request Screen
+            Column(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(9999.dp))
-                    .background(Color(0xD90F172A))
-                    .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(9999.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.FitnessCenter,
-                    contentDescription = null,
-                    tint = AccentCyan,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "AI Pose Kinematics Vision",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextMain
-                )
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Glass Rep Counter Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .glassCard(cornerRadius = 24.dp, elevation = 20.dp)
+                    .fillMaxSize()
                     .padding(24.dp),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "$repCount / $targetReps",
-                        fontSize = 52.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isDone) AccentEmeraldGlow else TextMain,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Elbow Joint Angle: ${currentAngle.toInt()}° (Target < 90°)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextDim
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .shadow(20.dp, CircleShape, spotColor = AccentCyan.copy(alpha = 0.4f))
+                        .clip(CircleShape)
+                        .background(AccentIndigo.copy(alpha = 0.2f))
+                        .border(2.dp, AccentCyan, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = AccentCyanGlow,
+                        modifier = Modifier.size(40.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            if (isDone) {
+                Text(
+                    text = "Camera Access Required",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextMain
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "FocusMe uses on-device Google ML Kit to count your push-ups using real-time joint kinematics.\n\n🔒 100% Private: Processed entirely on your device. Zero photos or videos are ever saved or uploaded.",
+                    fontSize = 13.sp,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                Spacer(modifier = Modifier.height(30.dp))
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(SuccessGradient)
-                        .clickable { onCompleted() },
+                        .background(PrimaryGradient)
+                        .clickable {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Grant Camera Permission & Begin",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        } else {
+            // Camera Live View + ML Kit Pose Detection
+            AndroidView(
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx).apply {
+                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    }
+                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+
+                    cameraProviderFuture.addListener({
+                        try {
+                            val cameraProvider = cameraProviderFuture.get()
+
+                            val preview = Preview.Builder().build().also {
+                                it.setSurfaceProvider(previewView.surfaceProvider)
+                            }
+
+                            val imageAnalysis = ImageAnalysis.Builder()
+                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                .build()
+
+                            val analyzer = PoseAnalyzer(
+                                isPushUpMode = true,
+                                targetReps = targetReps,
+                                onRepProgress = { count, _, angle ->
+                                    poseDetected = true
+                                    repCount = count
+                                    currentAngle = angle
+                                },
+                                onGoalReached = {
+                                    isDone = true
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+                                    }
+                                }
+                            )
+
+                            imageAnalysis.setAnalyzer(cameraExecutor, analyzer)
+
+                            val preferredSelector = if (useFrontCamera) {
+                                CameraSelector.DEFAULT_FRONT_CAMERA
+                            } else {
+                                CameraSelector.DEFAULT_BACK_CAMERA
+                            }
+
+                            val selector = if (cameraProvider.hasCamera(preferredSelector)) {
+                                preferredSelector
+                            } else {
+                                CameraSelector.DEFAULT_BACK_CAMERA
+                            }
+
+                            cameraProvider.unbindAll()
+                            cameraProvider.bindToLifecycle(
+                                lifecycleOwner,
+                                selector,
+                                preview,
+                                imageAnalysis
+                            )
+                        } catch (e: Exception) {
+                            Log.e("PushUpCounter", "Error binding CameraX: ${e.message}", e)
+                        }
+                    }, ContextCompat.getMainExecutor(ctx))
+
+                    previewView
+                },
+                update = {
+                    // Update preview if camera selector changed
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Modern Transparent HUD Overlay
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Top Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(9999.dp))
+                            .background(Color(0xD90F172A))
+                            .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(9999.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
+                            imageVector = Icons.Default.FitnessCenter,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
+                            tint = AccentCyan,
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("5 Reps Verified • Claim Break", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (poseDetected) "🟢 Pose Tracking Active" else "🟡 Searching for Body...",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (poseDetected) AccentEmeraldGlow else AccentAmber
+                        )
+                    }
+
+                    // Camera Switch Button
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xD90F172A))
+                            .border(1.dp, Color(0x3338BDF8), CircleShape)
+                            .clickable { useFrontCamera = !useFrontCamera },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cameraswitch,
+                            contentDescription = "Switch Camera",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
-            } else {
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Bottom Floating Rep Counter HUD
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xCC000000))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .glassCard(cornerRadius = 24.dp, elevation = 20.dp)
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Place phone on the floor and perform 5 clean push-ups",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = TextMain
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "$repCount / $targetReps",
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isDone) AccentEmeraldGlow else TextMain,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Elbow Angle: ${currentAngle.toInt()}° (Bend < 90° for rep)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextDim
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (isDone) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(SuccessGradient)
+                            .clickable { onCompleted() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "5 Reps Verified • Claim Break",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xD9000000))
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = "Place phone on floor ~1 meter away facing you",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TextMuted
+                        )
+                    }
                 }
             }
         }

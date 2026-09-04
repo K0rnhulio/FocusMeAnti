@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
@@ -34,13 +36,18 @@ import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.focusme.app.FocusMeApp
+import com.focusme.app.data.preferences.AppPreferences
 import com.focusme.app.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -65,6 +73,10 @@ fun SettingsScreen() {
     val whatsappStatus by prefs.whatsappStatusBlock.collectAsState(initial = true)
     val zaloVideo by prefs.zaloVideoBlock.collectAsState(initial = true)
     val reactiveNight by prefs.reactiveNight.collectAsState(initial = true)
+    val lifeGoal by prefs.lifeGoal.collectAsState(initial = AppPreferences.DEFAULT_LIFE_GOAL)
+
+    var goalText by remember(lifeGoal) { mutableStateOf(lifeGoal) }
+    var isEditingGoal by remember { mutableStateOf(false) }
 
     val hasOverlay = Settings.canDrawOverlays(context)
 
@@ -99,13 +111,116 @@ fun SettingsScreen() {
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Shields & Permissions",
+                        text = "Shields & Settings",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = TextMain
                     )
                     Text(
-                        text = "Anti-Tamper & In-App Filter Status",
+                        text = "Purpose Reminders & Anti-Tamper",
+                        fontSize = 11.sp,
+                        color = TextDim
+                    )
+                }
+            }
+        }
+
+        // 🎯 MY NORTH STAR LIFE GOAL CARD
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassCard(cornerRadius = 24.dp, elevation = 10.dp)
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFFFBBF24),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "My North Star Life Goal",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMain
+                        )
+                    }
+
+                    Text(
+                        text = if (isEditingGoal) "Cancel" else "Edit",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentCyan,
+                        modifier = Modifier
+                            .clickable {
+                                if (isEditingGoal) goalText = lifeGoal
+                                isEditingGoal = !isEditingGoal
+                            }
+                            .padding(4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (isEditingGoal) {
+                    OutlinedTextField(
+                        value = goalText,
+                        onValueChange = { goalText = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentCyan,
+                            unfocusedBorderColor = CardInner,
+                            focusedTextColor = TextMain,
+                            unfocusedTextColor = TextMain
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PrimaryGradient)
+                            .clickable {
+                                scope.launch {
+                                    prefs.setLifeGoal(goalText.trim())
+                                    isEditingGoal = false
+                                    Toast.makeText(context, "🎯 Life Goal Saved!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Save Life Goal Statement",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "\"$lifeGoal\"",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFFFBBF24),
+                        lineHeight = 20.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "This exact statement is displayed when you attempt to open Reddit or distracting apps.",
                         fontSize = 11.sp,
                         color = TextDim
                     )
@@ -194,8 +309,8 @@ fun SettingsScreen() {
                 )
 
                 ModernSwitchRow(
-                    title = "Zalo Full Newsfeed Shield",
-                    desc = "Blocks 'Nhật ký' (Timeline) & 'Khám phá' feed tabs",
+                    title = "Zalo Full Newsfeed & Video Shield",
+                    desc = "Blocks 'Nhật ký' (Timeline), 'Khám phá' & Video player",
                     icon = Icons.Rounded.Shield,
                     checked = zaloVideo,
                     onCheckedChange = {}
