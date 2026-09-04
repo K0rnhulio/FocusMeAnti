@@ -58,9 +58,17 @@ fun DashboardScreen(
     onLaunchPushUps: () -> Unit
 ) {
     val db = FocusMeApp.instance.database
+    val prefs = FocusMeApp.instance.preferences
     val hourKey = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault()).format(Date())
     val currentUsage by db.usageDao().observeUsage(hourKey).collectAsState(initial = null)
     val reflections by db.reflectionDao().observeAllReflections().collectAsState(initial = emptyList())
+
+    val mazeHour by prefs.mazeSolvedHour.collectAsState(initial = "")
+    val shakeHour by prefs.shakeSolvedHour.collectAsState(initial = "")
+    val pushUpHour by prefs.pushUpSolvedHour.collectAsState(initial = "")
+    val isMazeSolved = mazeHour == hourKey
+    val isShakeSolved = shakeHour == hourKey
+    val isPushUpSolved = pushUpHour == hourKey
 
     val cal = Calendar.getInstance()
     val currentHour = cal.get(Calendar.HOUR_OF_DAY)
@@ -278,6 +286,7 @@ fun DashboardScreen(
                     subtitle = "Gyro Labyrinth",
                     icon = Icons.Rounded.Games,
                     gradient = Brush.linearGradient(listOf(Color(0xFF06B6D4), Color(0xFF3B82F6))),
+                    isCompleted = isMazeSolved,
                     onClick = onLaunchMaze,
                     modifier = Modifier.weight(1f)
                 )
@@ -287,6 +296,7 @@ fun DashboardScreen(
                     subtitle = "Blood Surge",
                     icon = Icons.Rounded.Bolt,
                     gradient = Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFEF4444))),
+                    isCompleted = isShakeSolved,
                     onClick = onLaunchShakes,
                     modifier = Modifier.weight(1f)
                 )
@@ -296,6 +306,7 @@ fun DashboardScreen(
                     subtitle = "Pose Vision",
                     icon = Icons.Rounded.FitnessCenter,
                     gradient = Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF06B6D4))),
+                    isCompleted = isPushUpSolved,
                     onClick = onLaunchPushUps,
                     modifier = Modifier.weight(1f)
                 )
@@ -442,6 +453,7 @@ fun ChallengeLaunchCard(
     subtitle: String,
     icon: ImageVector,
     gradient: Brush,
+    isCompleted: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -457,11 +469,11 @@ fun ChallengeLaunchCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(gradient),
+                    .background(if (isCompleted) Brush.linearGradient(listOf(AccentEmerald, AccentCyan)) else gradient),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = icon,
+                    imageVector = if (isCompleted) Icons.Rounded.CheckCircle else icon,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(22.dp)
@@ -472,12 +484,13 @@ fun ChallengeLaunchCard(
                 text = title,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextMain
+                color = if (isCompleted) AccentEmeraldGlow else TextMain
             )
             Text(
-                text = subtitle,
+                text = if (isCompleted) "✓ Cleared" else subtitle,
                 fontSize = 9.sp,
-                color = TextDim
+                fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal,
+                color = if (isCompleted) AccentEmeraldGlow else TextDim
             )
         }
     }

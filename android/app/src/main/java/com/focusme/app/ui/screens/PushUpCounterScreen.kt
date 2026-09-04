@@ -57,9 +57,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
+import com.focusme.app.FocusMeApp
 import com.focusme.app.core.vision.PoseAnalyzer
 import com.focusme.app.ui.theme.*
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Executors
 
 @Composable
@@ -68,6 +73,7 @@ fun PushUpCounterScreen(
     onCompleted: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
@@ -339,7 +345,13 @@ fun PushUpCounterScreen(
                             .height(52.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(SuccessGradient)
-                            .clickable { onCompleted() },
+                            .clickable {
+                                scope.launch {
+                                    val hourKey = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault()).format(Date())
+                                    FocusMeApp.instance.preferences.markGateSolved("pushup", hourKey)
+                                    onCompleted()
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -49,17 +49,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.focusme.app.FocusMeApp
 import com.focusme.app.core.game.MazeGenerator
 import com.focusme.app.core.game.MazePhysicsEngine
 import com.focusme.app.core.sensors.TiltSensorManager
 import com.focusme.app.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun MazeGameScreen(
     onCompleted: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
     val maze = remember { MazeGenerator.generate(rows = 9, cols = 7) }
@@ -229,7 +236,13 @@ fun MazeGameScreen(
                         .height(52.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(SuccessGradient)
-                        .clickable { onCompleted() },
+                        .clickable {
+                            scope.launch {
+                                val hourKey = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault()).format(Date())
+                                FocusMeApp.instance.preferences.markGateSolved("maze", hourKey)
+                                onCompleted()
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

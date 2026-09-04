@@ -29,8 +29,13 @@ class AppPreferences(private val context: Context) {
         val KEY_ZALO_VIDEO_BLOCK = booleanPreferencesKey("zalo_video_block")
         val KEY_REACTIVE_NIGHT = booleanPreferencesKey("reactive_night_messaging")
         val KEY_MORNING_DATE = stringPreferencesKey("morning_unlocked_date")
-        val KEY_REACTIVE_EXPIRY = stringPreferencesKey("reactive_pass_expiry") // Format: timestamp
+        val KEY_REACTIVE_EXPIRY = stringPreferencesKey("reactive_pass_expiry")
         val KEY_LIFE_GOAL = stringPreferencesKey("life_goal_statement")
+
+        // 3 Toll Gates Hourly Completion Keys
+        val KEY_GATE_MAZE_HOUR = stringPreferencesKey("gate_maze_hour")
+        val KEY_GATE_SHAKE_HOUR = stringPreferencesKey("gate_shake_hour")
+        val KEY_GATE_PUSHUP_HOUR = stringPreferencesKey("gate_pushup_hour")
 
         const val DEFAULT_LIFE_GOAL = "Build financial freedom, master my craft & create a legendary life for my family."
 
@@ -54,6 +59,21 @@ class AppPreferences(private val context: Context) {
     val reactiveNight: Flow<Boolean> = context.dataStore.data.map { it[KEY_REACTIVE_NIGHT] ?: true }
     val morningUnlockedDate: Flow<String> = context.dataStore.data.map { it[KEY_MORNING_DATE] ?: "" }
     val lifeGoal: Flow<String> = context.dataStore.data.map { it[KEY_LIFE_GOAL] ?: DEFAULT_LIFE_GOAL }
+
+    // Gate completion flows
+    val mazeSolvedHour: Flow<String> = context.dataStore.data.map { it[KEY_GATE_MAZE_HOUR] ?: "" }
+    val shakeSolvedHour: Flow<String> = context.dataStore.data.map { it[KEY_GATE_SHAKE_HOUR] ?: "" }
+    val pushUpSolvedHour: Flow<String> = context.dataStore.data.map { it[KEY_GATE_PUSHUP_HOUR] ?: "" }
+
+    suspend fun markGateSolved(gateType: String, hourKey: String) {
+        context.dataStore.edit {
+            when (gateType) {
+                "maze" -> it[KEY_GATE_MAZE_HOUR] = hourKey
+                "shake" -> it[KEY_GATE_SHAKE_HOUR] = hourKey
+                "pushup" -> it[KEY_GATE_PUSHUP_HOUR] = hourKey
+            }
+        }
+    }
 
     suspend fun setMorningUnlockedToday() {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())

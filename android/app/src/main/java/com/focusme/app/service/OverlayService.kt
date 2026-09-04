@@ -22,6 +22,8 @@ class OverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var pillView: View? = null
     private var timerTextView: TextView? = null
+    private var pillBackgroundDrawable: GradientDrawable? = null
+    private var isCurrentlyLowTime: Boolean = false
 
     companion object {
         private const val ACTION_SHOW_PILL = "com.focusme.SHOW_PILL"
@@ -75,6 +77,8 @@ class OverlayService : Service() {
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         }
 
+        val density = resources.displayMetrics.density
+
         if (pillView == null) {
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -83,8 +87,6 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            // Density conversion
-            val density = resources.displayMetrics.density
             val marginEndPx = (18 * density).toInt()
             val marginBottomPx = (56 * density).toInt()
 
@@ -102,7 +104,7 @@ class OverlayService : Service() {
                 y = marginBottomPx
             }
 
-            // Beautiful Obsidian Glassmorphic Container
+            // Create pill container
             val container = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -112,9 +114,23 @@ class OverlayService : Service() {
                 elevation = 16f
             }
 
-            updatePillBackground(container, isLowTime)
+            // Stable GradientDrawable (created ONCE to prevent overlay redraw flickering)
+            val cornerRadius = 30f * density
+            val strokeWidth = (1.5f * density).toInt()
+            val strokeColor = if (isLowTime) Color.parseColor("#88F43F5E") else Color.parseColor("#6638BDF8")
+            val bgColor = Color.parseColor("#EE0B1220")
 
-            // Timer Text View with Tabular Figures
+            val bgDrawable = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                this.cornerRadius = cornerRadius
+                setColor(bgColor)
+                setStroke(strokeWidth, strokeColor)
+            }
+            container.background = bgDrawable
+            pillBackgroundDrawable = bgDrawable
+            isCurrentlyLowTime = isLowTime
+
+            // Timer text
             val tv = TextView(this).apply {
                 text = "⏱️ $timeStr"
                 setTextColor(if (isLowTime) Color.parseColor("#F43F5E") else Color.parseColor("#38BDF8"))
@@ -130,27 +146,18 @@ class OverlayService : Service() {
                 windowManager?.addView(pillView, params)
             } catch (e: Exception) {}
         } else {
-            // Update existing view
+            // Update existing view smoothly without recreating drawables or invalidating layout
             timerTextView?.text = "⏱️ $timeStr"
-            timerTextView?.setTextColor(if (isLowTime) Color.parseColor("#F43F5E") else Color.parseColor("#38BDF8"))
-            (pillView as? LinearLayout)?.let { updatePillBackground(it, isLowTime) }
-        }
-    }
 
-    private fun updatePillBackground(view: View, isLowTime: Boolean) {
-        val density = resources.displayMetrics.density
-        val cornerRadius = 30f * density
-        val strokeWidth = (1.5f * density).toInt()
-        val strokeColor = if (isLowTime) Color.parseColor("#66F43F5E") else Color.parseColor("#5538BDF8")
-        val bgColor = Color.parseColor("#E60B1220")
-
-        val drawable = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            this.cornerRadius = cornerRadius
-            setColor(bgColor)
-            setStroke(strokeWidth, strokeColor)
+            // Only update colors if low-time state changed
+            if (isCurrentlyLowTime != isLowTime) {
+                isCurrentlyLowTime = isLowTime
+                val strokeWidth = (1.5f * density).toInt()
+                val strokeColor = if (isLowTime) Color.parseColor("#88F43F5E") else Color.parseColor("#6638BDF8")
+                pillBackgroundDrawable?.setStroke(strokeWidth, strokeColor)
+                timerTextView?.setTextColor(if (isLowTime) Color.parseColor("#F43F5E") else Color.parseColor("#38BDF8"))
+            }
         }
-        view.background = drawable
     }
 
     private fun removePill() {
@@ -160,6 +167,7 @@ class OverlayService : Service() {
             } catch (e: Exception) {}
             pillView = null
             timerTextView = null
+            pillBackgroundDrawable = null
         }
     }
 

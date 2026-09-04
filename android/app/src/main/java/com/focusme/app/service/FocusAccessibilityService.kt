@@ -31,6 +31,12 @@ class FocusAccessibilityService : AccessibilityService() {
     private var currentForegroundPackage = ""
     private var lastBlockedTimestamp = 0L
     private var lastZaloRedirectTimestamp = 0L
+    private var lastBlockedDomainSeenTimestamp = 0L
+
+    // Wall-clock tracking variables to prevent fast ticking
+    private var trackingStartTime = 0L
+    private var trackingBaseUsedSeconds = 0
+    private var trackingTarget = ""
 
     private val hourFormat = SimpleDateFormat("yyyy-MM-dd-HH", Locale.getDefault())
 
@@ -312,7 +318,7 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Precise Browser URL Interception & Dwell Time Tracker:
+     * Precise Browser URL Interception & Dwell Time Tracker with Grace Period:
      * Scans for blocked domains (Reddit, Twitter, etc.) inside Chrome, Samsung Internet, Firefox...
      */
     private fun handleBrowserUrlCheck(rootNode: AccessibilityNodeInfo?, browserPkg: String) {
@@ -356,7 +362,10 @@ class FocusAccessibilityService : AccessibilityService() {
             }
         }
 
+        val now = System.currentTimeMillis()
+
         if (matchedDomain != null) {
+            lastBlockedDomainSeenTimestamp = now
             val webTarget = "web:$matchedDomain"
             if (currentForegroundPackage != webTarget) {
                 currentForegroundPackage = webTarget
@@ -364,10 +373,13 @@ class FocusAccessibilityService : AccessibilityService() {
             }
         } else {
             // User is in browser, but on an allowed page (e.g. google.com, stackoverflow)
+            // Apply a 2.5s grace period to prevent flickering when URL bar momentarily hides during scroll
             if (currentForegroundPackage.startsWith("web:")) {
-                currentForegroundPackage = browserPkg
-                stopHeartbeat()
-                OverlayService.hidePill(this@FocusAccessibilityService)
+                if (now - lastBlockedDomainSeenTimestamp > 2500) {
+                    currentForegroundPackage = browserPkg
+                    stopHeartbeat()
+                    OverlayService.hidePill(this@FocusAccessibilityService)
+                }
             }
         }
     }
@@ -377,7 +389,8 @@ class FocusAccessibilityService : AccessibilityService() {
         if (now - lastBlockedTimestamp < 800) return // Debounce
 
         serviceScope.launch {
-            val blockedSet = FocusMeApp.instance.preferences.blockedPackages.first()
+            val prefs = FocusMeApp.instance.preferences
+            val blockedSet = prefs.blockedPackages.first()
             
             val isBlocked = blockedSet.contains(pkg) || 
                             pkg.contains("reddit") || 
@@ -394,8 +407,8 @@ class FocusAccessibilityService : AccessibilityService() {
 
             val cal = Calendar.getInstance()
             val currentHour = cal.get(Calendar.HOUR_OF_DAY)
-            val startHour = FocusMeApp.instance.preferences.startHour.first()
-            val endHour = FocusMeApp.instance.preferences.endHour.first()
+            val startHour = prefs.startHour.first()
+            val endHour = prefs.endHour.first()
 
             // 1. Outside 10:00 AM - 9:00 PM: 100% Lockout
             if (currentHour < startHour || currentHour >= endHour) {
@@ -409,7 +422,7 @@ class FocusAccessibilityService : AccessibilityService() {
             val hourKey = hourFormat.format(Date())
             val usageDao = FocusMeApp.instance.database.usageDao()
             var usage = usageDao.getUsage(hourKey) ?: HourlyUsage(hourKey = hourKey, usedSeconds = 0)
-            val quota = FocusMeApp.instance.preferences.quotaSeconds.first()
+            val quota = prefs.quotaSeconds.first()
 
             // 2. Hourly Quota Exhausted: 100% Lockout
             if (usage.usedSeconds >= quota) {
@@ -420,7 +433,21 @@ class FocusAccessibilityService : AccessibilityService() {
                 return@launch
             }
 
-            // 3. 30-Min Mindful Reflection Required
+            // 3. Check if all 3 Physical & Cognitive Toll Gates are cleared for this hour
+            val mazeHour = prefs.mazeSolvedHour.first()
+            val shakeHour = prefs.shakeSolvedHour.first()
+            val pushUpHour = prefs.pushUpSolvedHour.first()
+            val allGatesCleared = (mazeHour == hourKey && shakeHour == hourKey && pushUpHour == hourKey)
+
+            if (!allGatesCleared) {
+                lastBlockedTimestamp = now
+                stopHeartbeat()
+                OverlayService.hidePill(this@FocusAccessibilityService)
+                launchLockOverlay("gauntlet_required", pkg)
+                return@launch
+            }
+
+            // 4. 30-Min Mindful Reflection Required
             if (!usage.hasReflected) {
                 lastBlockedTimestamp = now
                 stopHeartbeat()
@@ -429,23 +456,41 @@ class FocusAccessibilityService : AccessibilityService() {
                 return@launch
             }
 
-            // 4. Start live active ticker & floating pill
+            // 5. Start wall-clock dwell timer & floating pill
             startHeartbeat(pkg, hourKey, quota)
         }
     }
 
+    /**
+     * Hardware Wall-Clock Dwell Time Engine:
+     * Derives elapsed seconds from System.currentTimeMillis() so the timer can NEVER run faster than real time.
+     */
     private fun startHeartbeat(pkg: String, hourKey: String, quota: Int) {
         heartbeatJob?.cancel()
+
         heartbeatJob = serviceScope.launch {
             val usageDao = FocusMeApp.instance.database.usageDao()
             val prefs = FocusMeApp.instance.preferences
 
-            while (isActive && currentForegroundPackage == pkg) {
-                val usage = usageDao.getUsage(hourKey) ?: HourlyUsage(hourKey = hourKey, usedSeconds = 0)
-                val newUsed = usage.usedSeconds + 1
-                usageDao.insertOrUpdate(usage.copy(usedSeconds = newUsed, lastUpdated = System.currentTimeMillis()))
+            val currentDbUsage = usageDao.getUsage(hourKey) ?: HourlyUsage(hourKey = hourKey, usedSeconds = 0)
 
-                val remaining = (quota - newUsed).coerceAtLeast(0)
+            // Initialize wall-clock anchor
+            trackingStartTime = System.currentTimeMillis()
+            trackingBaseUsedSeconds = currentDbUsage.usedSeconds
+            trackingTarget = pkg
+
+            while (isActive && currentForegroundPackage == pkg) {
+                val elapsedSeconds = ((System.currentTimeMillis() - trackingStartTime) / 1000).toInt()
+                val currentTotalUsed = trackingBaseUsedSeconds + elapsedSeconds
+
+                usageDao.insertOrUpdate(
+                    currentDbUsage.copy(
+                        usedSeconds = currentTotalUsed,
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                )
+
+                val remaining = (quota - currentTotalUsed).coerceAtLeast(0)
 
                 val showPillEnabled = prefs.showPill.first()
                 if (showPillEnabled) {
@@ -465,6 +510,7 @@ class FocusAccessibilityService : AccessibilityService() {
     private fun stopHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        trackingTarget = ""
     }
 
     private fun launchLockOverlay(reason: String, targetPkg: String) {
