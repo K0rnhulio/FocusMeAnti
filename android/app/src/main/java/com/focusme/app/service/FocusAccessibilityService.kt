@@ -163,7 +163,7 @@ class FocusAccessibilityService : AccessibilityService() {
         }
 
         // 4. Standalone Target Apps Evaluation (Reddit, Twitter/X, FB, IG, TikTok, YouTube, LinkedIn)
-        val lowerPkg = packageName.toLowerCase(Locale.getDefault())
+        val lowerPkg = packageName.lowercase()
         val isTargetApp = lowerPkg.contains("reddit") ||
                 lowerPkg.contains("twitter") ||
                 lowerPkg.contains("katana") ||
@@ -214,9 +214,9 @@ class FocusAccessibilityService : AccessibilityService() {
 
             // Trigger B: User tapped on Timeline ("Nhật ký"), Discover ("Khám phá"), or Video
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-                val clickedText = event.text?.joinToString(" ") ?: ""
+                val clickedText = event.text.joinToString(" ")
                 val clickedDesc = event.contentDescription?.toString() ?: ""
-                val combined = "$clickedText $clickedDesc".toLowerCase(Locale.getDefault())
+                val combined = "$clickedText $clickedDesc".lowercase()
 
                 val blockedWords = listOf("nhật ký", "khám phá", "timeline", "khoảnh khắc", "video")
                 if (blockedWords.any { combined.contains(it) }) {
@@ -256,7 +256,7 @@ class FocusAccessibilityService : AccessibilityService() {
     }
 
     private fun isZaloVideoFeedActive(rootNode: AccessibilityNodeInfo?, event: AccessibilityEvent): Boolean {
-        val className = event.className?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
+        val className = event.className?.toString()?.lowercase() ?: ""
         if (className.contains("video") || className.contains("player") || className.contains("zinstant")) {
             return true
         }
@@ -339,9 +339,9 @@ class FocusAccessibilityService : AccessibilityService() {
             if (!isEnabled) return@launch
 
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-                val clickedText = event.text?.joinToString(" ") ?: ""
+                val clickedText = event.text.joinToString(" ")
                 val clickedDesc = event.contentDescription?.toString() ?: ""
-                val combined = "$clickedText $clickedDesc".toLowerCase(Locale.getDefault())
+                val combined = "$clickedText $clickedDesc".lowercase()
 
                 if (combined.contains("status") || combined.contains("updates") || combined.contains("cập nhật")) {
                     redirectToWhatsAppChats(rootNode)
@@ -400,7 +400,7 @@ class FocusAccessibilityService : AccessibilityService() {
             for (id in urlBarIds) {
                 val nodes = rootNode.findAccessibilityNodeInfosByViewId(id)
                 if (nodes.isNotEmpty() && nodes[0].text != null) {
-                    detectedUrl = nodes[0].text.toString().toLowerCase(Locale.getDefault())
+                    detectedUrl = nodes[0].text.toString().lowercase()
                     break
                 }
             }
@@ -410,7 +410,7 @@ class FocusAccessibilityService : AccessibilityService() {
         if (detectedUrl == null) {
             try {
                 for (w in windows) {
-                    val title = w.title?.toString()?.toLowerCase(Locale.getDefault()) ?: ""
+                    val title = w.title?.toString()?.lowercase() ?: ""
                     for (domain in BLOCKED_DOMAINS) {
                         val base = domain.substringBefore(".")
                         if (title.contains(domain) || (base.length > 3 && title.contains(base))) {
@@ -473,7 +473,7 @@ class FocusAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             val prefs = FocusMeApp.instance.preferences
             val blockedSet = prefs.blockedPackages.first()
-            val lowerPkg = pkg.toLowerCase(Locale.getDefault())
+            val lowerPkg = pkg.lowercase()
 
             val isBlocked = blockedSet.contains(pkg) || 
                             lowerPkg.contains("reddit") || 
@@ -611,16 +611,18 @@ class FocusAccessibilityService : AccessibilityService() {
         if (now - lastBlockedTimestamp < 600) return
         lastBlockedTimestamp = now
 
-        Log.e(TAG, "🛡️ LAUNCHING LOCK OVERLAY for $targetPkg (reason: $reason)")
+        Log.d(TAG, "🛡️ LAUNCHING LOCK OVERLAY for $targetPkg (reason: $reason)")
 
-        // 1. Instantly exit the blocked app to Home Screen
-        try {
-            performGlobalAction(GLOBAL_ACTION_HOME)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed performGlobalAction HOME: ${e.message}")
+        // 1. Only minimize native apps to Home if overlay permission is missing (never minimize Chrome/browsers)
+        if (!targetPkg.startsWith("web:") && !Settings.canDrawOverlays(this)) {
+            try {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed performGlobalAction HOME: ${e.message}")
+            }
         }
 
-        // 2. Launch full-screen lock overlay
+        // 2. Launch full-screen lock overlay directly on top of current task
         val intent = Intent(this, OverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or 
