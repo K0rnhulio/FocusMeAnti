@@ -13,17 +13,16 @@ import kotlin.math.abs
 import kotlin.math.atan2
 
 /**
- * Biomechanical Pose Analyzer for Push-Ups and Squats.
+ * Biomechanical Pose Analyzer for Overhead Air Press / Military Press & Squats.
  *
- * Prevents false positives by enforcing:
- * 1. High confidence threshold on all 3 arm landmarks (> 0.65)
- * 2. Unilateral arm tracking (never crosses left and right joints)
- * 3. Horizontal torso alignment check (verifies user is actually planking, not standing)
- * 4. 4-Stage Biomechanical State Machine with timing thresholds (min 700ms rep time)
- * 5. Exponential Moving Average (EMA) angle smoothing to eliminate jitter
+ * Designed for desk/tabletop phone placement:
+ * 1. Tracks head, shoulders, elbows, and wrists with phone propped in front of user.
+ * 2. Bottom Phase: Hands at shoulder height, elbows bent.
+ * 3. Top Phase: Hands pressed fully straight overhead above head level.
+ * 4. Temporal constraints and EMA smoothing ensure no accidental false counts.
  */
 class PoseAnalyzer(
-    private val isPushUpMode: Boolean = true,
+    private val isPushUpMode: Boolean = true, // true = Overhead Air Press mode
     private val targetReps: Int = 5,
     private val onRepProgress: (current: Int, target: Int, angle: Double, statusMessage: String) -> Unit,
     private val onGoalReached: () -> Unit
@@ -31,11 +30,9 @@ class PoseAnalyzer(
 
     companion object {
         private const val TAG = "PoseAnalyzer"
-        private const val MIN_CONFIDENCE = 0.65f
-        private const val UP_ANGLE_THRESHOLD = 150.0
-        private const val DOWN_ANGLE_THRESHOLD = 85.0
-        private const val MIN_REP_DURATION_MS = 650L
-        private const val MIN_BOTTOM_DURATION_MS = 180L
+        private const val MIN_CONFIDENCE = 0.60f
+        private const val MIN_REP_DURATION_MS = 600L
+        private const val MIN_TOP_HOLD_MS = 150L
     }
 
     private val options = AccuratePoseDetectorOptions.Builder()
@@ -45,19 +42,19 @@ class PoseAnalyzer(
     private val detector = PoseDetection.getClient(options)
 
     private var repCount = 0
-    private var smoothedAngle = 180.0
+    private var smoothedAngle = 90.0
     private var isFirstAngle = true
 
-    // State Machine
-    private enum class RepState {
-        READY_UP,
-        DESCENDING,
-        AT_BOTTOM,
-        ASCENDING
+    // State Machine for Overhead Air Press
+    private enum class PressState {
+        AT_SHOULDERS,
+        PRESSING_UP,
+        TOP_OVERHEAD,
+        LOWERING_DOWN
     }
 
-    private var currentState = RepState.READY_UP
-    private var bottomTimestamp = 0L
+    private var currentPressState = PressState.AT_SHOULDERS
+    private var topTimestamp = 0L
     private var repStartTimestamp = 0L
     private var lastRepCompletedTimestamp = 0L
 
@@ -85,25 +82,29 @@ class PoseAnalyzer(
     private fun processPose(pose: Pose) {
         val landmarks = pose.allPoseLandmarks
         if (landmarks.isEmpty()) {
-            onRepProgress(repCount, targetReps, 180.0, "Position yourself in camera view")
+            onRepProgress(repCount, targetReps, 90.0, "Place phone on desk facing your torso")
             return
         }
 
         if (isPushUpMode) {
-            analyzePushUp(pose)
+            analyzeOverheadAirPress(pose)
         } else {
             analyzeSquat(pose)
         }
     }
 
     /**
-     * Strict Push-Up Analysis:
-     * - Verifies horizontal planking orientation
-     * - Tracks only the single most confident arm
-     * - Requires complete descent (< 85°) and full lockout (> 150°)
+     * Overhead Air Press (Military Press) Analysis:
+     * User sits or stands in front of phone placed on desk/table.
+     * - Hands start at shoulder height (elbows bent).
+     * - Press straight overhead above head level with arms extended.
+     * - Return hands to shoulder height to complete 1 rep.
      */
-    private fun analyzePushUp(pose: Pose) {
-        // 1. Evaluate Left Arm Quality
+    private fun analyzeOverheadAirPress(pose: Pose) {
+        // Head / Nose reference landmark
+        val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
+
+        // Evaluate Left Arm Quality
         val lShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
         val lElbow = pose.getPoseLandmark(PoseLandmark.LEFT_ELBOW)
         val lWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
@@ -111,7 +112,7 @@ class PoseAnalyzer(
             (lShoulder.inFrameLikelihood + lElbow.inFrameLikelihood + lWrist.inFrameLikelihood) / 3f
         } else 0f
 
-        // 2. Evaluate Right Arm Quality
+        // Evaluate Right Arm Quality
         val rShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
         val rElbow = pose.getPoseLandmark(PoseLandmark.RIGHT_ELBOW)
         val rWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
@@ -119,7 +120,7 @@ class PoseAnalyzer(
             (rShoulder.inFrameLikelihood + rElbow.inFrameLikelihood + rWrist.inFrameLikelihood) / 3f
         } else 0f
 
-        // 3. Select Best Visible Arm (MUST exceed minimum confidence)
+        // Select Best Visible Arm
         val (shoulder, elbow, wrist) = when {
             leftArmConfidence >= rightArmConfidence && leftArmConfidence >= MIN_CONFIDENCE -> {
                 Triple(lShoulder!!, lElbow!!, lWrist!!)
@@ -128,38 +129,15 @@ class PoseAnalyzer(
                 Triple(rShoulder!!, rElbow!!, rWrist!!)
             }
             else -> {
-                onRepProgress(repCount, targetReps, 180.0, "Body obscured • Ensure arms are visible")
+                onRepProgress(repCount, targetReps, 90.0, "Torso obscured • Ensure shoulders & arms in frame")
                 return
             }
         }
 
-        // 4. Biomechanical Plank Check: Torso horizontal orientation check
-        // Check if user is standing upright vs lying/planking horizontally
-        val lHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-        val rHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
-        val hip = when {
-            lHip != null && lHip.inFrameLikelihood >= 0.5f -> lHip
-            rHip != null && rHip.inFrameLikelihood >= 0.5f -> rHip
-            else -> null
-        }
-
-        if (hip != null) {
-            val deltaX = abs(shoulder.position.x - hip.position.x)
-            val deltaY = abs(shoulder.position.y - hip.position.y)
-
-            // If user is completely vertical (standing upright): deltaY >> deltaX
-            // In a push-up on the ground, deltaX is substantial compared to deltaY
-            val isStandingUpright = deltaY > deltaX * 1.8f && shoulder.position.y < hip.position.y - 120
-            if (isStandingUpright) {
-                onRepProgress(repCount, targetReps, 180.0, "Assume plank position on the floor")
-                return
-            }
-        }
-
-        // 5. Calculate Raw Joint Angle
+        // Calculate Joint Angle (Shoulder -> Elbow -> Wrist)
         val rawAngle = calculateAngle(shoulder, elbow, wrist)
 
-        // 6. Exponential Moving Average (EMA) Filter (alpha = 0.60)
+        // Exponential Moving Average (EMA) Filter
         if (isFirstAngle) {
             smoothedAngle = rawAngle
             isFirstAngle = false
@@ -169,51 +147,56 @@ class PoseAnalyzer(
 
         val now = System.currentTimeMillis()
 
-        // 7. Push-Up State Machine
+        // Coordinate Check: In Android/MLKit, Y increases downwards!
+        // So a lower Y value means physically HIGHER on the screen.
+        val headReferenceY = nose?.position?.y ?: (shoulder.position.y - 120f)
+        val isWristAboveHead = wrist.position.y < headReferenceY
+        val isWristAtShoulders = wrist.position.y >= (headReferenceY - 20f)
+
         var status = ""
-        when (currentState) {
-            RepState.READY_UP -> {
-                status = "Ready • Lower your chest"
-                if (smoothedAngle >= UP_ANGLE_THRESHOLD) {
-                    // Ready at top
-                } else if (smoothedAngle < 135.0) {
-                    currentState = RepState.DESCENDING
+
+        when (currentPressState) {
+            PressState.AT_SHOULDERS -> {
+                status = "Hands at shoulders • Press up overhead"
+                // Transition to PRESSING_UP when arms begin reaching above shoulders
+                if (wrist.position.y < shoulder.position.y && smoothedAngle > 110.0) {
+                    currentPressState = PressState.PRESSING_UP
                     repStartTimestamp = now
-                    status = "Going down..."
+                    status = "Pressing overhead..."
                 }
             }
 
-            RepState.DESCENDING -> {
-                status = "Lower further (Target < 85°)"
-                if (smoothedAngle <= DOWN_ANGLE_THRESHOLD) {
-                    currentState = RepState.AT_BOTTOM
-                    bottomTimestamp = now
-                    status = "Good depth! Hold..."
-                } else if (smoothedAngle > 145.0) {
+            PressState.PRESSING_UP -> {
+                status = "Press all the way above your head!"
+                // Reached top overhead position: hands above head & arm extended (angle >= 140°)
+                if (isWristAboveHead && smoothedAngle >= 140.0) {
+                    currentPressState = PressState.TOP_OVERHEAD
+                    topTimestamp = now
+                    status = "Top reached! Lower down"
+                } else if (isWristAtShoulders && smoothedAngle < 100.0) {
                     // Aborted rep
-                    currentState = RepState.READY_UP
+                    currentPressState = PressState.AT_SHOULDERS
                 }
             }
 
-            RepState.AT_BOTTOM -> {
-                val timeAtBottom = now - bottomTimestamp
-                if (timeAtBottom >= MIN_BOTTOM_DURATION_MS && smoothedAngle > 95.0) {
-                    currentState = RepState.ASCENDING
-                    status = "Push up!"
-                } else if (timeAtBottom < MIN_BOTTOM_DURATION_MS) {
-                    status = "Hold depth..."
+            PressState.TOP_OVERHEAD -> {
+                val holdDuration = now - topTimestamp
+                if (holdDuration >= MIN_TOP_HOLD_MS) {
+                    currentPressState = PressState.LOWERING_DOWN
+                    status = "Now lower hands to shoulder level"
                 } else {
-                    status = "Push back up!"
+                    status = "Hold overhead..."
                 }
             }
 
-            RepState.ASCENDING -> {
-                status = "Push to full extension"
-                if (smoothedAngle >= UP_ANGLE_THRESHOLD) {
-                    val totalRepDuration = now - repStartTimestamp
+            PressState.LOWERING_DOWN -> {
+                status = "Lower hands to shoulders"
+                // Hands returned to shoulder level: rep completed!
+                if (isWristAtShoulders || smoothedAngle <= 115.0) {
+                    val totalDuration = now - repStartTimestamp
                     val cooldown = now - lastRepCompletedTimestamp
 
-                    if (totalRepDuration >= MIN_REP_DURATION_MS && cooldown > 500) {
+                    if (totalDuration >= MIN_REP_DURATION_MS && cooldown > 450) {
                         repCount++
                         lastRepCompletedTimestamp = now
                         status = "✓ Rep $repCount verified!"
@@ -225,7 +208,7 @@ class PoseAnalyzer(
                             return
                         }
                     }
-                    currentState = RepState.READY_UP
+                    currentPressState = PressState.AT_SHOULDERS
                 }
             }
         }
@@ -263,12 +246,12 @@ class PoseAnalyzer(
         val now = System.currentTimeMillis()
         var status = "Stand tall"
 
-        if (smoothedAngle < 100.0 && currentState == RepState.READY_UP) {
-            currentState = RepState.AT_BOTTOM
-            bottomTimestamp = now
+        if (smoothedAngle < 100.0 && currentPressState == PressState.AT_SHOULDERS) {
+            currentPressState = PressState.TOP_OVERHEAD
+            topTimestamp = now
             status = "Good squat depth! Stand up"
-        } else if (smoothedAngle > 155.0 && currentState == RepState.AT_BOTTOM) {
-            if (now - bottomTimestamp >= 300) {
+        } else if (smoothedAngle > 155.0 && currentPressState == PressState.TOP_OVERHEAD) {
+            if (now - topTimestamp >= 300) {
                 repCount++
                 status = "✓ Squat $repCount counted!"
                 if (repCount >= targetReps) {
@@ -276,7 +259,7 @@ class PoseAnalyzer(
                     return
                 }
             }
-            currentState = RepState.READY_UP
+            currentPressState = PressState.AT_SHOULDERS
         }
 
         onRepProgress(repCount, targetReps, smoothedAngle, status)

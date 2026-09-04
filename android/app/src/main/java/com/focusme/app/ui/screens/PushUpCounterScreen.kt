@@ -150,7 +150,7 @@ fun PushUpCounterScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "FocusMe uses Google MediaPipe Accurate Pose to track joint kinematics.\n\n🔒 100% Private: All computer vision runs strictly on your device without internet.",
+                    text = "Prop phone upright on your desk facing your torso.\n\nPerform 5 Overhead Air Presses (Military Press without weights) by pressing both hands straight above your head.\n\n🔒 100% Private: All computer vision runs strictly on your device without internet.",
                     fontSize = 13.sp,
                     color = TextMuted,
                     textAlign = TextAlign.Center,
@@ -276,7 +276,7 @@ fun PushUpCounterScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "BlazePose Accurate AI",
+                            text = "Overhead Air Press",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentCyan
@@ -321,7 +321,7 @@ fun PushUpCounterScreen(
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Elbow Angle: ${currentAngle.toInt()}° (Target < 85°)",
+                            text = "Arm Extension: ${currentAngle.toInt()}° (Reach overhead)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextDim
@@ -331,7 +331,7 @@ fun PushUpCounterScreen(
                             text = coachingMessage,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (coachingMessage.contains("✓") || coachingMessage.contains("Good")) AccentEmeraldGlow else AccentCyanGlow,
+                            color = if (coachingMessage.contains("✓") || coachingMessage.contains("Good") || coachingMessage.contains("Top")) AccentEmeraldGlow else AccentCyanGlow,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -364,7 +364,7 @@ fun PushUpCounterScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "5 Clean Push-Ups Verified • Claim Break",
+                                text = "5 Overhead Presses Verified • Claim Break",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = Color.White
@@ -379,7 +379,7 @@ fun PushUpCounterScreen(
                             .padding(horizontal = 14.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "Floor plank required • Random arm waves are rejected",
+                            text = "Prop phone upright on desk • Press both hands straight above head",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = TextMuted

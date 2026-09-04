@@ -322,10 +322,10 @@ fun GauntletTollGateScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // GATE 3: AI Push-Ups
+            // GATE 3: AI Overhead Air Press
             TollGateRowCard(
-                title = "3. AI Pose 5 Push-Ups",
-                subtitle = "Body strength • 5 clean reps verified by BlazePose AI",
+                title = "3. AI Overhead Air Press (5 Reps)",
+                subtitle = "Desk pose • Raise hands straight overhead above head level",
                 icon = Icons.Default.FitnessCenter,
                 isCompleted = isPushUpSolved,
                 onClick = onLaunchPushUp

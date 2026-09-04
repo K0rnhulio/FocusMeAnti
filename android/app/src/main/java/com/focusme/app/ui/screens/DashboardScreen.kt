@@ -302,8 +302,8 @@ fun DashboardScreen(
                 )
 
                 ChallengeLaunchCard(
-                    title = "AI Push-Up",
-                    subtitle = "Pose Vision",
+                    title = "Air Press",
+                    subtitle = "5 Overhead Reps",
                     icon = Icons.Rounded.FitnessCenter,
                     gradient = Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF06B6D4))),
                     isCompleted = isPushUpSolved,
